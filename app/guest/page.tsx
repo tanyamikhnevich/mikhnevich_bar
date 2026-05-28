@@ -1,76 +1,75 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { WineFiltersBar } from "../ui/WineFiltersBar";
 import { WineTable } from "../ui/WineTable";
-import { formatTableAmount, useWines } from "../../lib/wines";
-import type { WinePriceFilterField } from "../../lib/wineFilters";
-import {
-  filterWinesByToolbar,
-  parseOptionalPositiveNumber,
-  sortedCountryFilterOptions,
-  WINE_TABLE_PAGE_SIZE,
-} from "../../lib/wineFilters";
+import { formatTableAmount } from "../../lib/wines";
+import { useWineBrowseFlat } from "../../lib/wineBrowse";
+import { WINE_TABLE_PAGE_SIZE } from "../../lib/wineFilters";
+import { guestUrlToBrowseFilters, useGuestWineListUrl } from "../../lib/wineUrlState";
 
-export default function GuestPage() {
-  const { wines, loading, error, totals } = useWines();
+function GuestPageContent() {
+  const searchParams = useSearchParams();
+  const { state, replaceUrl, resetFilters } = useGuestWineListUrl();
+  const { filters, limit } = state;
 
-  const baseList = useMemo(() => wines.filter((w) => !w.drank), [wines]);
-
-  const [nameQuery, setNameQuery] = useState("");
-  const [countryKey, setCountryKey] = useState("");
-  const [priceField, setPriceField] = useState<WinePriceFilterField>("purchase");
-  const [priceMinStr, setPriceMinStr] = useState("");
-  const [priceMaxStr, setPriceMaxStr] = useState("");
-  const [ratingMinStr, setRatingMinStr] = useState("");
-  const [visibleLimit, setVisibleLimit] = useState(WINE_TABLE_PAGE_SIZE);
-
-  const countryOptions = useMemo(
-    () => sortedCountryFilterOptions(baseList),
-    [baseList],
+  const browseParams = useMemo(
+    () => guestUrlToBrowseFilters(searchParams),
+    [searchParams],
   );
 
-  const countryFilter = useMemo(
-    () => (countryKey && countryOptions.includes(countryKey) ? countryKey : ""),
-    [countryKey, countryOptions],
-  );
+  const { data, loading, error } = useWineBrowseFlat(browseParams);
 
-  const filterInput = useMemo(
-    () => ({
-      nameQuery,
-      countryKey: countryFilter,
-      priceField,
-      priceMin: parseOptionalPositiveNumber(priceMinStr),
-      priceMax: parseOptionalPositiveNumber(priceMaxStr),
-      ratingMin: parseOptionalPositiveNumber(ratingMinStr),
-    }),
-    [nameQuery, countryFilter, priceField, priceMinStr, priceMaxStr, ratingMinStr],
-  );
+  const totals = data?.totals ?? {
+    collection: 0,
+    drank: 0,
+    bottles: 0,
+    value: 0,
+  };
+  const countryOptions = data?.facets.countries ?? [];
+  const regionOptions = data?.facets.regions ?? [];
+  const effectiveCountryKeys =
+    data?.filters?.countryKeys ?? filters.countryKeys;
+  const effectiveRegionKey = data?.filters?.regionKey ?? filters.regionKey;
 
-  useEffect(() => {
-    queueMicrotask(() => setVisibleLimit(WINE_TABLE_PAGE_SIZE));
-  }, [filterInput]);
+  const filteredTotal = data?.total ?? 0;
+  const visible = data?.items ?? [];
+  const canShowMore = visible.length < filteredTotal;
 
-  const filtered = useMemo(
-    () => filterWinesByToolbar(baseList, filterInput),
-    [baseList, filterInput],
-  );
+  const setNameQuery = (value: string) => {
+    replaceUrl({ nameQuery: value }, { clearLimits: true });
+  };
 
-  const visible = useMemo(
-    () => filtered.slice(0, visibleLimit),
-    [filtered, visibleLimit],
-  );
+  const setCountryKeys = (value: string[]) => {
+    replaceUrl(
+      {
+        countryKeys: value,
+        ...(value.length === 1 ? {} : { regionKey: "" }),
+      },
+      { clearLimits: true },
+    );
+  };
 
-  const canShowMore = filtered.length > visible.length;
+  const setRegionKey = (value: string) => {
+    replaceUrl({ regionKey: value }, { clearLimits: true });
+  };
 
-  const resetFilters = () => {
-    setNameQuery("");
-    setCountryKey("");
-    setPriceField("purchase");
-    setPriceMinStr("");
-    setPriceMaxStr("");
-    setRatingMinStr("");
+  const setPriceField = (value: typeof filters.priceField) => {
+    replaceUrl({ priceField: value }, { clearLimits: true });
+  };
+
+  const setPriceMinStr = (value: string) => {
+    replaceUrl({ priceMinStr: value }, { clearLimits: true });
+  };
+
+  const setPriceMaxStr = (value: string) => {
+    replaceUrl({ priceMaxStr: value }, { clearLimits: true });
+  };
+
+  const setRatingMinStr = (value: string) => {
+    replaceUrl({ ratingMinStr: value }, { clearLimits: true });
   };
 
   return (
@@ -109,23 +108,26 @@ export default function GuestPage() {
           </div>
         ) : null}
 
-        {loading ? (
+        {loading && !data ? (
           <div className="py-16 text-center text-sm text-zinc-500">Загрузка…</div>
         ) : (
           <>
             <WineFiltersBar
-              nameQuery={nameQuery}
+              nameQuery={filters.nameQuery}
               onNameQuery={setNameQuery}
-              countryKey={countryFilter}
-              onCountryKey={setCountryKey}
+              countryKeys={effectiveCountryKeys}
+              onCountryKeys={setCountryKeys}
               countryOptions={countryOptions}
-              priceField={priceField}
+              regionKey={effectiveRegionKey}
+              onRegionKey={setRegionKey}
+              regionOptions={regionOptions}
+              priceField={filters.priceField}
               onPriceField={setPriceField}
-              priceMin={priceMinStr}
+              priceMin={filters.priceMinStr}
               onPriceMin={setPriceMinStr}
-              priceMax={priceMaxStr}
+              priceMax={filters.priceMaxStr}
               onPriceMax={setPriceMaxStr}
-              ratingMin={ratingMinStr}
+              ratingMin={filters.ratingMinStr}
               onRatingMin={setRatingMinStr}
               onReset={resetFilters}
             />
@@ -136,9 +138,9 @@ export default function GuestPage() {
                 <div className="text-right text-xs text-zinc-500">
                   <div>Только не выпитые · без кнопок</div>
                   <div className="mt-0.5">
-                    {filtered.length} по фильтру
-                    {visible.length < filtered.length
-                      ? ` · показано ${visible.length} из ${filtered.length}`
+                    {filteredTotal} по фильтру
+                    {visible.length < filteredTotal
+                      ? ` · показано ${visible.length} из ${filteredTotal}`
                       : null}
                   </div>
                 </div>
@@ -151,7 +153,7 @@ export default function GuestPage() {
                   <button
                     type="button"
                     onClick={() =>
-                      setVisibleLimit((n) => n + WINE_TABLE_PAGE_SIZE)
+                      replaceUrl({ limit: limit + WINE_TABLE_PAGE_SIZE })
                     }
                     className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-100"
                   >
@@ -164,5 +166,19 @@ export default function GuestPage() {
         )}
       </main>
     </div>
+  );
+}
+
+export default function GuestPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-full bg-zinc-50 py-16 text-center text-sm text-zinc-500">
+          Загрузка…
+        </div>
+      }
+    >
+      <GuestPageContent />
+    </Suspense>
   );
 }

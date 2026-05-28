@@ -1,11 +1,19 @@
 import { NextResponse } from "next/server";
 import { prisma } from "../../../lib/prisma";
 import { toWineJson } from "../../../lib/mapWineJson";
+import { normalizeWineGeo } from "../../../lib/wineNormalize";
+import { normalizeWineVintage } from "../../../lib/wineVintage";
 import { parseVivinoFromRatings } from "../../../lib/wineUtils";
 
+/** Полный список (без фильтров). Для UI используйте GET /api/wines/browse. */
 export async function GET() {
   const wines = await prisma.wine.findMany({
-    orderBy: [{ drank: "asc" }, { color: "asc" }, { createdAt: "desc" }],
+    orderBy: [
+      { drank: "asc" },
+      { color: "asc" },
+      { createdAt: "desc" },
+      { id: "asc" },
+    ],
   });
 
   return NextResponse.json(wines.map(toWineJson));
@@ -43,16 +51,7 @@ export async function POST(req: Request) {
   const year =
     body.year === null || body.year === "" || body.year === undefined
       ? null
-      : (() => {
-          const n =
-            typeof body.year === "number"
-              ? body.year
-              : Number(String(body.year).replace(",", "."));
-          if (!Number.isFinite(n)) return null;
-          const y = Math.round(n);
-          if (y < 1800 || y > 2100) return null;
-          return y;
-        })();
+      : normalizeWineVintage(body.year) ?? null;
 
   const quantity =
     typeof body.quantity === "number" && Number.isFinite(body.quantity)
@@ -79,16 +78,20 @@ export async function POST(req: Request) {
         ? new Date(body.purchaseDate)
         : null;
 
+  const geo = normalizeWineGeo({
+    country: body.country == null ? null : String(body.country),
+    countryCode: body.countryCode == null ? null : String(body.countryCode),
+    region: body.region == null ? null : String(body.region),
+    subregion: body.subregion == null ? null : String(body.subregion),
+    grape: body.grape == null ? null : String(body.grape),
+  });
+
   const created = await prisma.wine.create({
     data: {
       name,
       producer,
       year,
-      country: body.country == null ? null : String(body.country),
-      countryCode: body.countryCode == null ? null : String(body.countryCode),
-      region: body.region == null ? null : String(body.region),
-      subregion: body.subregion == null ? null : String(body.subregion),
-      grape: body.grape == null ? null : String(body.grape),
+      ...geo,
       ratings,
       purchasePrice: parseIntOrNull(body.purchasePrice),
       purchaseCurrency: currencyOrNull(body.purchaseCurrency),

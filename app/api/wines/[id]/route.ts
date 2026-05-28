@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import type { Prisma } from "../../../../lib/generated/prisma/client";
 import { prisma } from "../../../../lib/prisma";
 import { toWineJson } from "../../../../lib/mapWineJson";
+import { normalizeWineGeo, normalizeWineText } from "../../../../lib/wineNormalize";
+import { normalizeWineVintage } from "../../../../lib/wineVintage";
 import { parseVivinoFromRatings } from "../../../../lib/wineUtils";
 
 export async function PATCH(
@@ -15,21 +17,69 @@ export async function PATCH(
 
   if (typeof body.drank === "boolean") data.drank = body.drank;
 
-  if (typeof body.name === "string") data.name = body.name.trim();
-  if (typeof body.producer === "string") data.producer = body.producer.trim();
+  if (typeof body.name === "string") {
+    data.name = normalizeWineText(body.name) ?? body.name.trim();
+  }
+  if (typeof body.producer === "string") {
+    data.producer = normalizeWineText(body.producer) ?? body.producer.trim();
+  }
 
   if ("year" in body) {
     if (body.year === null || body.year === "") data.year = null;
-    else if (typeof body.year === "number" && Number.isFinite(body.year)) {
-      data.year = Math.round(body.year);
+    else {
+      const v = normalizeWineVintage(body.year);
+      if (v !== null && v !== undefined) data.year = v;
     }
   }
 
-  for (const key of ["country", "countryCode", "region", "subregion", "grape", "notes"] as const) {
-    if (key in body) {
-      const v = body[key];
-      data[key] = v === null || v === undefined || v === "" ? null : String(v);
+  const geoTouched =
+    "country" in body ||
+    "countryCode" in body ||
+    "region" in body ||
+    "subregion" in body ||
+    "grape" in body;
+
+  if (geoTouched) {
+    const existing = await prisma.wine.findUnique({
+      where: { id },
+      select: {
+        country: true,
+        countryCode: true,
+        region: true,
+        subregion: true,
+        grape: true,
+      },
+    });
+    if (!existing) {
+      return NextResponse.json({ error: "Не найдено" }, { status: 404 });
     }
+
+    const readGeo = (key: "country" | "countryCode" | "region" | "subregion" | "grape") => {
+      if (!(key in body)) return existing[key];
+      const v = body[key];
+      return v === null || v === undefined || v === "" ? null : String(v);
+    };
+
+    const geo = normalizeWineGeo({
+      country: readGeo("country"),
+      countryCode: readGeo("countryCode"),
+      region: readGeo("region"),
+      subregion: readGeo("subregion"),
+      grape: readGeo("grape"),
+    });
+
+    if ("country" in body || "countryCode" in body) {
+      data.country = geo.country;
+      data.countryCode = geo.countryCode;
+    }
+    if ("region" in body) data.region = geo.region;
+    if ("subregion" in body) data.subregion = geo.subregion;
+    if ("grape" in body) data.grape = geo.grape;
+  }
+
+  if ("notes" in body) {
+    const v = body.notes;
+    data.notes = v === null || v === undefined || v === "" ? null : String(v);
   }
 
   for (const key of ["purchaseCurrency", "originCurrency", "israelCurrency"] as const) {
@@ -98,6 +148,20 @@ export async function PATCH(
       data: data as Prisma.WineUpdateInput,
     });
     return NextResponse.json(toWineJson(updated));
+  } catch {
+    return NextResponse.json({ error: "Не найдено" }, { status: 404 });
+  }
+}
+
+export async function DELETE(
+  _req: Request,
+  ctx: { params: Promise<{ id: string }> },
+) {
+  const { id } = await ctx.params;
+
+  try {
+    await prisma.wine.delete({ where: { id } });
+    return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json({ error: "Не найдено" }, { status: 404 });
   }

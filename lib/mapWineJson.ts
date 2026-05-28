@@ -2,7 +2,7 @@ export function toWineJson(w: {
   id: string;
   name: string;
   producer: string;
-  year: number | null;
+  year: string | null;
   country: string | null;
   countryCode: string | null;
   region: string | null;
