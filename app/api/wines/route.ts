@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "../../../lib/prisma";
 import { toWineJson } from "../../../lib/mapWineJson";
-import { parseVivinoFromRatings } from "../../../lib/wineUtils";
+import { normalizeWineYear, parseVivinoFromRatings } from "../../../lib/wineUtils";
 
 export async function GET() {
   const wines = await prisma.wine.findMany({
@@ -40,19 +40,7 @@ export async function POST(req: Request) {
       ? body.color
       : "red";
 
-  const year =
-    body.year === null || body.year === "" || body.year === undefined
-      ? null
-      : (() => {
-          const n =
-            typeof body.year === "number"
-              ? body.year
-              : Number(String(body.year).replace(",", "."));
-          if (!Number.isFinite(n)) return null;
-          const y = Math.round(n);
-          if (y < 1800 || y > 2100) return null;
-          return y;
-        })();
+  const year = normalizeWineYear(body.year);
 
   const quantity =
     typeof body.quantity === "number" && Number.isFinite(body.quantity)
@@ -96,7 +84,9 @@ export async function POST(req: Request) {
       originCurrency: currencyOrNull(body.originCurrency),
       israelPrice: parseIntOrNull(body.israelPrice),
       israelCurrency: currencyOrNull(body.israelCurrency),
-      guestPrice: parseIntOrNull(body.guestPrice),
+      isGuestVisible: Boolean(body.isGuestVisible),
+      guestBottlePrice: parseIntOrNull(body.guestBottlePrice ?? body.guestPrice),
+      guestGlassPrice: parseIntOrNull(body.guestGlassPrice),
       purchaseDate:
         purchaseDate && !Number.isNaN(purchaseDate.getTime()) ? purchaseDate : null,
       vivinoRating,

@@ -23,7 +23,7 @@ model Wine {
   id           String    @id @default(cuid())
   name         String
   producer     String
-  year         Int?
+  year         String?
   country      String?
   countryCode  String?
   region       String?
@@ -36,7 +36,9 @@ model Wine {
   originCurrency   String?
   israelPrice   Int?
   israelCurrency   String?
-  guestPrice    Int?
+  isGuestVisible   Boolean  @default(false)
+  guestBottlePrice Int?
+  guestGlassPrice  Int?
 
   purchaseDate DateTime?
   vivinoRating Float?

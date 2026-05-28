@@ -26,6 +26,8 @@ const PRICE_LABEL: Record<WinePriceFilterField, string> = {
   purchase: "покупка",
   israel: "Израиль",
   origin: "оригинал",
+  guestBottle: "бутылка (гость)",
+  guestGlass: "бокал (гость)",
 };
 
 export function WineFiltersBar({

@@ -19,7 +19,7 @@ import * as XLSX from "xlsx";
 
 import type { WineColor } from "../lib/generated/prisma/enums";
 import { prisma } from "../lib/prisma";
-import { parseVivinoFromRatings } from "../lib/wineUtils";
+import { normalizeWineYear, parseVivinoFromRatings } from "../lib/wineUtils";
 
 const IMPORT_TAG = "[import:My_Wines.xlsx]";
 
@@ -69,20 +69,8 @@ function parsePricePairs(row: unknown[]): PricePair[] {
   return pairs;
 }
 
-function parseYear(raw: unknown): number | null {
-  if (raw === null || raw === undefined || raw === "") return null;
-  if (typeof raw === "number" && Number.isFinite(raw)) {
-    const y = Math.round(raw);
-    if (y < 1800 || y > 2100) return null;
-    return y;
-  }
-  const s = String(raw).trim();
-  if (/^(N\.V\.|NAS|N\/A)$/i.test(s)) return null;
-  const n = Number(s.replace(",", "."));
-  if (!Number.isFinite(n)) return null;
-  const y = Math.round(n);
-  if (y < 1800 || y > 2100) return null;
-  return y;
+function parseYear(raw: unknown): string | null {
+  return normalizeWineYear(raw);
 }
 
 function parseQuantity(raw: unknown): number {
@@ -204,7 +192,7 @@ function parseWineRows(wb: XLSX.WorkBook): {
   wines: Array<{
     name: string;
     producer: string;
-    year: number | null;
+    year: string | null;
     country: string | null;
     countryCode: string | null;
     region: string | null;
@@ -245,7 +233,7 @@ function parseWineRows(wb: XLSX.WorkBook): {
   const wines: Array<{
     name: string;
     producer: string;
-    year: number | null;
+    year: string | null;
     country: string | null;
     countryCode: string | null;
     region: string | null;

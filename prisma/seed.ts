@@ -5,15 +5,15 @@ import { prisma } from "../lib/prisma";
 const LEGACY_DEMO_WINES: Array<{
   name: string;
   producer: string;
-  year: number;
+  year: string;
 }> = [
-  { name: "Barolo Riserva", producer: "Giacomo Conterno", year: 2016 },
-  { name: "Opus One", producer: "Opus One Winery", year: 2018 },
-  { name: "Château Margaux", producer: "Château Margaux", year: 2015 },
-  { name: "Cloudy Bay Sauvignon Blanc", producer: "Cloudy Bay", year: 2021 },
-  { name: "Whispering Angel Rosé", producer: "Château d'Esclans", year: 2023 },
-  { name: "Chablis Premier Cru", producer: "Domaine William Fèvre", year: 2020 },
-  { name: "Franciacorta Brut", producer: "Ca' del Bosco", year: 2019 },
+  { name: "Barolo Riserva", producer: "Giacomo Conterno", year: "2016" },
+  { name: "Opus One", producer: "Opus One Winery", year: "2018" },
+  { name: "Château Margaux", producer: "Château Margaux", year: "2015" },
+  { name: "Cloudy Bay Sauvignon Blanc", producer: "Cloudy Bay", year: "2021" },
+  { name: "Whispering Angel Rosé", producer: "Château d'Esclans", year: "2023" },
+  { name: "Chablis Premier Cru", producer: "Domaine William Fèvre", year: "2020" },
+  { name: "Franciacorta Brut", producer: "Ca' del Bosco", year: "2019" },
 ];
 
 async function main() {

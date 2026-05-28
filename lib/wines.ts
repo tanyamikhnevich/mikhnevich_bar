@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { compareWineYears } from "./wineUtils";
 
 export const WINE_COLOR_ORDER = ["red", "white", "rose", "sparkling"] as const;
 export type WineColor = (typeof WINE_COLOR_ORDER)[number];
@@ -26,6 +27,8 @@ export type WineSortKey =
   | "purchasePrice"
   | "israelPrice"
   | "originPrice"
+  | "guestBottlePrice"
+  | "guestGlassPrice"
   | "vivinoRating"
   | "name"
   | "year";
@@ -34,7 +37,7 @@ export type Wine = {
   id: string;
   name: string;
   producer: string;
-  year?: number | null;
+  year?: string | null;
   country?: string | null;
   countryCode?: string | null;
   region?: string | null;
@@ -47,7 +50,9 @@ export type Wine = {
   originCurrency?: string | null;
   israelPrice?: number | null;
   israelCurrency?: string | null;
-  guestPrice?: number | null;
+  isGuestVisible?: boolean;
+  guestBottlePrice?: number | null;
+  guestGlassPrice?: number | null;
   purchaseDate?: string | null;
   vivinoRating?: number | null;
   quantity: number;
@@ -75,7 +80,10 @@ function normalizeWine(raw: Partial<Wine> & { name: string; producer: string }):
     id: String(raw.id ?? ""),
     name: raw.name,
     producer: raw.producer,
-    year: raw.year ?? null,
+    year:
+      raw.year === null || raw.year === undefined || raw.year === ""
+        ? null
+        : String(raw.year),
     country: raw.country ?? null,
     countryCode: raw.countryCode ?? null,
     region: raw.region ?? null,
@@ -88,7 +96,9 @@ function normalizeWine(raw: Partial<Wine> & { name: string; producer: string }):
     originCurrency: raw.originCurrency ?? null,
     israelPrice: raw.israelPrice ?? null,
     israelCurrency: raw.israelCurrency ?? null,
-    guestPrice: raw.guestPrice ?? null,
+    isGuestVisible: Boolean(raw.isGuestVisible),
+    guestBottlePrice: raw.guestBottlePrice ?? null,
+    guestGlassPrice: raw.guestGlassPrice ?? null,
     purchaseDate: raw.purchaseDate ?? null,
     vivinoRating: raw.vivinoRating ?? null,
     quantity: qty,
@@ -157,12 +167,20 @@ export function sortWines(
         c = cmpNum(a.originPrice, b.originPrice);
         if (c === 0) c = a.name.localeCompare(b.name, "ru");
         break;
+      case "guestBottlePrice":
+        c = cmpNum(a.guestBottlePrice, b.guestBottlePrice);
+        if (c === 0) c = a.name.localeCompare(b.name, "ru");
+        break;
+      case "guestGlassPrice":
+        c = cmpNum(a.guestGlassPrice, b.guestGlassPrice);
+        if (c === 0) c = a.name.localeCompare(b.name, "ru");
+        break;
       case "vivinoRating":
         c = cmpNum(a.vivinoRating, b.vivinoRating);
         if (c === 0) c = a.name.localeCompare(b.name, "ru");
         break;
       case "year":
-        c = cmpNum(a.year, b.year);
+        c = compareWineYears(a.year, b.year);
         if (c === 0) c = a.name.localeCompare(b.name, "ru");
         break;
       case "name":
@@ -288,7 +306,9 @@ export function useWines() {
           originCurrency: input.originCurrency || null,
           israelPrice: input.israelPrice,
           israelCurrency: input.israelCurrency || null,
-          guestPrice: input.guestPrice ?? null,
+          isGuestVisible: Boolean(input.isGuestVisible),
+          guestBottlePrice: input.guestBottlePrice ?? null,
+          guestGlassPrice: input.guestGlassPrice ?? null,
           purchaseDate: input.purchaseDate || null,
           vivinoRating: input.vivinoRating ?? null,
           quantity: input.quantity ?? 1,
@@ -316,5 +336,54 @@ export function useWines() {
     [refresh],
   );
 
-  return { wines, loading, error, refresh, addWine, updateWine, totals };
+  const saveGuestMenu = useCallback(
+    async (items: import("./guestWineApi").GuestWineUpdate[]) => {
+      const res = await fetch("/api/wines/guest", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items }),
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          wineIds?: string[];
+        };
+        const err = new Error(j.error ?? res.statusText) as Error & { wineIds?: string[] };
+        err.wineIds = j.wineIds;
+        throw err;
+      }
+      await refresh();
+    },
+    [refresh],
+  );
+
+  return { wines, loading, error, refresh, addWine, updateWine, saveGuestMenu, totals };
+}
+
+export function useGuestWines() {
+  const [wines, setWines] = useState<Wine[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    const res = await fetch("/api/wines/guest", { cache: "no-store" });
+    if (!res.ok) throw new Error(await parseErrorMessage(res));
+    const data = (await res.json()) as Wine[];
+    setWines(data.map((w) => normalizeWine(w)));
+    setError(null);
+  }, []);
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      void refresh()
+        .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
+        .finally(() => setLoading(false));
+    });
+  }, [refresh]);
+
+  return { wines, loading, error, refresh };
+}
+
+export function isGuestListWine(w: Wine): boolean {
+  return Boolean(w.isGuestVisible) && w.quantity > 0 && !w.drank;
 }

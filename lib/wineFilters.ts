@@ -2,7 +2,12 @@ import type { Wine } from "./wines";
 
 export const WINE_TABLE_PAGE_SIZE = 15;
 
-export type WinePriceFilterField = "purchase" | "israel" | "origin";
+export type WinePriceFilterField =
+  | "purchase"
+  | "israel"
+  | "origin"
+  | "guestBottle"
+  | "guestGlass";
 
 export type WineListFilterInput = {
   nameQuery: string;
@@ -41,6 +46,14 @@ function winePriceByField(w: Wine, field: WinePriceFilterField): number | null {
     case "origin":
       return w.originPrice != null && Number.isFinite(w.originPrice)
         ? Number(w.originPrice)
+        : null;
+    case "guestBottle":
+      return w.guestBottlePrice != null && Number.isFinite(w.guestBottlePrice)
+        ? Number(w.guestBottlePrice)
+        : null;
+    case "guestGlass":
+      return w.guestGlassPrice != null && Number.isFinite(w.guestGlassPrice)
+        ? Number(w.guestGlassPrice)
         : null;
   }
 }

@@ -6,6 +6,12 @@ import { AddWineModal } from "./ui/AddWineModal";
 import { WineFiltersBar } from "./ui/WineFiltersBar";
 import { SegmentedTabs } from "./ui/SegmentedTabs";
 import { WineTable } from "./ui/WineTable";
+import type { GuestSelectionDraft } from "../lib/guestSelection";
+import {
+  buildGuestSelectionDraft,
+  guestDraftToUpdates,
+  validateGuestSelectionDraft,
+} from "../lib/guestSelection";
 import type { Wine, WineColor, WineSortKey } from "../lib/wines";
 import {
   formatTableAmount,
@@ -25,10 +31,15 @@ import {
 } from "../lib/wineFilters";
 
 export default function Home() {
-  const { wines, loading, error, addWine, updateWine, totals } = useWines();
+  const { wines, loading, error, addWine, updateWine, saveGuestMenu, totals } = useWines();
+  const [guestSelectMode, setGuestSelectMode] = useState(false);
+  const [guestDraft, setGuestDraft] = useState<GuestSelectionDraft>({});
+  const [guestValidationIds, setGuestValidationIds] = useState<Set<string>>(new Set());
+  const [guestFormError, setGuestFormError] = useState<string | null>(null);
+  const [guestSaving, setGuestSaving] = useState(false);
   const [tab, setTab] = useState<"collection" | "drank">("collection");
   const [isAddOpen, setIsAddOpen] = useState(false);
-  const [sortBy, setSortBy] = useState<WineSortKey>("none");
+  const [sortBy, setSortBy] = useState<WineSortKey>("purchasePrice");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   const [nameQuery, setNameQuery] = useState("");
@@ -83,6 +94,58 @@ export default function Home() {
     }
     return out;
   }, [filtered, sortBy, sortDir]);
+
+  const enterGuestSelectMode = () => {
+    setGuestDraft(buildGuestSelectionDraft(tabWines));
+    setGuestValidationIds(new Set());
+    setGuestFormError(null);
+    setGuestSelectMode(true);
+  };
+
+  const exitGuestSelectMode = () => {
+    setGuestSelectMode(false);
+    setGuestDraft({});
+    setGuestValidationIds(new Set());
+    setGuestFormError(null);
+  };
+
+  const patchGuestDraft = (
+    id: string,
+    patch: Partial<GuestSelectionDraft[string]>,
+  ) => {
+    setGuestDraft((prev) => ({
+      ...prev,
+      [id]: { ...prev[id], ...patch },
+    }));
+    setGuestValidationIds((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  };
+
+  const handleSaveGuestMenu = async () => {
+    const validation = validateGuestSelectionDraft(guestDraft);
+    if (!validation.ok) {
+      setGuestValidationIds(new Set(validation.wineIds));
+      setGuestFormError("Для каждого выбранного вина укажите цену за бутылку");
+      return;
+    }
+    setGuestSaving(true);
+    setGuestFormError(null);
+    setGuestValidationIds(new Set());
+    try {
+      await saveGuestMenu(guestDraftToUpdates(tabWines, guestDraft));
+      exitGuestSelectMode();
+    } catch (e) {
+      const err = e as Error & { wineIds?: string[] };
+      if (err.wineIds?.length) setGuestValidationIds(new Set(err.wineIds));
+      setGuestFormError(err.message);
+    } finally {
+      setGuestSaving(false);
+    }
+  };
 
   const resetFilters = () => {
     setNameQuery("");
@@ -144,20 +207,65 @@ export default function Home() {
             <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
               <SegmentedTabs
                 value={tab}
-                onChange={setTab}
+                onChange={(v) => {
+                  if (guestSelectMode) exitGuestSelectMode();
+                  setTab(v);
+                }}
                 options={[
                   { value: "collection", label: `Коллекция (${totals.collection})` },
                   { value: "drank", label: `Выпито (${totals.drank})` },
                 ]}
               />
 
-              <Link
-                href="/guest"
-                className="inline-flex rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 sm:hidden"
-              >
-                Режим гостей
-              </Link>
+              <div className="flex flex-wrap items-center gap-2">
+                {tab === "collection" && !guestSelectMode ? (
+                  <button
+                    type="button"
+                    onClick={enterGuestSelectMode}
+                    className="inline-flex rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-800 hover:bg-rose-100"
+                  >
+                    Выбрать вина для гостей
+                  </button>
+                ) : null}
+                <Link
+                  href="/guest"
+                  className="inline-flex rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 sm:hidden"
+                >
+                  Режим гостей
+                </Link>
+              </div>
             </div>
+
+            {guestSelectMode ? (
+              <div className="mb-5 space-y-3 rounded-lg border border-rose-200 bg-rose-50/80 px-4 py-3">
+                {guestFormError ? (
+                  <p className="text-sm font-medium text-red-800">{guestFormError}</p>
+                ) : (
+                  <p className="text-sm text-rose-950">
+                    Отметьте вина для гостевой карты и укажите цены. Вина с нулевым
+                    остатком недоступны для выбора.
+                  </p>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleSaveGuestMenu()}
+                    disabled={guestSaving}
+                    className="inline-flex rounded-lg bg-rose-700 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-800 disabled:opacity-60"
+                  >
+                    {guestSaving ? "Сохранение…" : "Сохранить гостевую карту"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={exitGuestSelectMode}
+                    disabled={guestSaving}
+                    className="inline-flex rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-60"
+                  >
+                    Отменить
+                  </button>
+                </div>
+              </div>
+            ) : null}
 
             <WineFiltersBar
               nameQuery={nameQuery}
@@ -183,7 +291,6 @@ export default function Home() {
                 onChange={(e) => setSortBy(e.target.value as WineSortKey)}
                 className="h-9 rounded-md border border-zinc-200 bg-white px-2 text-sm text-zinc-900"
               >
-                <option value="none">как пришло с сервера</option>
                 <option value="purchaseDate">дата покупки</option>
                 <option value="purchasePrice">цена покупки</option>
                 <option value="israelPrice">цена в Израиле</option>
@@ -196,7 +303,6 @@ export default function Home() {
                 value={sortDir}
                 onChange={(e) => setSortDir(e.target.value as "asc" | "desc")}
                 className="h-9 rounded-md border border-zinc-200 bg-white px-2 text-sm text-zinc-900"
-                disabled={sortBy === "none"}
               >
                 <option value="desc">по убыванию</option>
                 <option value="asc">по возрастанию</option>
@@ -233,15 +339,27 @@ export default function Home() {
                           </div>
                         </div>
 
-                        <WineTable
-                          wines={visible}
-                          showActions
-                          onToggleDrank={(id, drank) =>
-                            void updateWine(id, { drank }).catch((e) =>
-                              alert(e instanceof Error ? e.message : String(e)),
-                            )
-                          }
-                        />
+                        {guestSelectMode && tab === "collection" ? (
+                          <WineTable
+                            wines={visible}
+                            variant="guestSelect"
+                            guestSelection={{
+                              draft: guestDraft,
+                              onDraftChange: patchGuestDraft,
+                              invalidIds: guestValidationIds,
+                            }}
+                          />
+                        ) : (
+                          <WineTable
+                            wines={visible}
+                            showActions
+                            onToggleDrank={(id, drank) =>
+                              void updateWine(id, { drank }).catch((e) =>
+                                alert(e instanceof Error ? e.message : String(e)),
+                              )
+                            }
+                          />
+                        )}
 
                         {canShowMore ? (
                           <div className="border-t border-zinc-100 px-4 py-3">

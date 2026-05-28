@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { Prisma } from "../../../../lib/generated/prisma/client";
 import { prisma } from "../../../../lib/prisma";
 import { toWineJson } from "../../../../lib/mapWineJson";
-import { parseVivinoFromRatings } from "../../../../lib/wineUtils";
+import { normalizeWineYear, parseVivinoFromRatings } from "../../../../lib/wineUtils";
 
 export async function PATCH(
   req: Request,
@@ -19,10 +19,7 @@ export async function PATCH(
   if (typeof body.producer === "string") data.producer = body.producer.trim();
 
   if ("year" in body) {
-    if (body.year === null || body.year === "") data.year = null;
-    else if (typeof body.year === "number" && Number.isFinite(body.year)) {
-      data.year = Math.round(body.year);
-    }
+    data.year = normalizeWineYear(body.year);
   }
 
   for (const key of ["country", "countryCode", "region", "subregion", "grape", "notes"] as const) {
@@ -65,8 +62,22 @@ export async function PATCH(
     return Number.isFinite(n) ? Math.round(n) : null;
   };
 
-  for (const key of ["purchasePrice", "originPrice", "israelPrice", "guestPrice"] as const) {
+  for (const key of [
+    "purchasePrice",
+    "originPrice",
+    "israelPrice",
+    "guestBottlePrice",
+    "guestGlassPrice",
+  ] as const) {
     if (key in body) data[key] = parseIntOrNull(body[key]);
+  }
+
+  if ("guestPrice" in body && !("guestBottlePrice" in body)) {
+    data.guestBottlePrice = parseIntOrNull(body.guestPrice);
+  }
+
+  if (typeof body.isGuestVisible === "boolean") {
+    data.isGuestVisible = body.isGuestVisible;
   }
 
   if ("purchaseDate" in body) {
