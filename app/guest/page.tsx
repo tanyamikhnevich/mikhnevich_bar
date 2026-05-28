@@ -1,119 +1,146 @@
 "use client";
 
-import Link from "next/link";
-import { Suspense, useMemo } from "react";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { AppHeader } from "../ui/AppHeader";
+import { SortBar } from "../ui/SortBar";
 import { WineFiltersBar } from "../ui/WineFiltersBar";
-import { WineTable } from "../ui/WineTable";
-import { formatTableAmount } from "../../lib/wines";
-import { useWineBrowseFlat } from "../../lib/wineBrowse";
-import { WINE_TABLE_PAGE_SIZE } from "../../lib/wineFilters";
-import { guestUrlToBrowseFilters, useGuestWineListUrl } from "../../lib/wineUrlState";
+import { GuestWineTable } from "../ui/GuestWineTable";
+import { useGuestWines } from "@/lib/wines";
+import type { WineColor, WineSortKey } from "@/lib/wines";
+import {
+  groupWinesByColor,
+  sortWines,
+  WINE_COLOR_LABEL,
+  WINE_COLOR_ORDER,
+  WINE_SECTION_HEADER_CLASS,
+} from "@/lib/wines";
+import type { WinePriceFilterField } from "@/lib/wineQuery";
+import {
+  filterWinesByToolbar,
+  parseOptionalPositiveNumber,
+  sortedCountryFilterOptions,
+  wineCountryFilterKey,
+  WINE_TABLE_PAGE_SIZE,
+} from "@/lib/wineFilters";
 
-function GuestPageContent() {
-  const searchParams = useSearchParams();
-  const { state, replaceUrl, resetFilters } = useGuestWineListUrl();
-  const { filters, limit } = state;
+export default function GuestPage() {
+  const { wines, loading, error } = useGuestWines();
 
-  const browseParams = useMemo(
-    () => guestUrlToBrowseFilters(searchParams),
-    [searchParams],
+  const [nameQuery, setNameQuery] = useState("");
+  const [countryKeys, setCountryKeys] = useState<string[]>([]);
+  const [regionKey, setRegionKey] = useState("");
+  const [priceField, setPriceField] = useState<WinePriceFilterField>("guestBottle");
+  const [priceMinStr, setPriceMinStr] = useState("");
+  const [priceMaxStr, setPriceMaxStr] = useState("");
+  const [ratingMinStr, setRatingMinStr] = useState("");
+  const [sortBy, setSortBy] = useState<WineSortKey>("guestBottlePrice");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [limitByColor, setLimitByColor] = useState<Partial<Record<WineColor, number>>>(
+    {},
   );
 
-  const { data, loading, error } = useWineBrowseFlat(browseParams);
+  const countryOptions = useMemo(() => sortedCountryFilterOptions(wines), [wines]);
 
-  const totals = data?.totals ?? {
-    collection: 0,
-    drank: 0,
-    bottles: 0,
-    value: 0,
+  const effectiveCountryKeys = useMemo(
+    () => countryKeys.filter((k) => countryOptions.includes(k)),
+    [countryKeys, countryOptions],
+  );
+
+  const regionOptions = useMemo(() => {
+    if (effectiveCountryKeys.length !== 1) return [] as string[];
+    const s = new Set<string>();
+    for (const w of wines) {
+      if (wineCountryFilterKey(w) !== effectiveCountryKeys[0]) continue;
+      const r = w.region?.trim();
+      if (r) s.add(r);
+    }
+    return [...s].sort((a, b) => a.localeCompare(b, "ru"));
+  }, [wines, effectiveCountryKeys]);
+
+  const effectiveRegionKey = useMemo(
+    () => (regionKey && regionOptions.includes(regionKey) ? regionKey : ""),
+    [regionKey, regionOptions],
+  );
+
+  const filterInput = useMemo(
+    () => ({
+      nameQuery,
+      countryKeys: effectiveCountryKeys,
+      priceField,
+      priceMin: parseOptionalPositiveNumber(priceMinStr),
+      priceMax: parseOptionalPositiveNumber(priceMaxStr),
+      ratingMin: parseOptionalPositiveNumber(ratingMinStr),
+    }),
+    [nameQuery, effectiveCountryKeys, priceField, priceMinStr, priceMaxStr, ratingMinStr],
+  );
+
+  useEffect(() => {
+    queueMicrotask(() => setLimitByColor({}));
+  }, [filterInput]);
+
+  const filteredList = useMemo(() => {
+    let list = filterWinesByToolbar(wines, filterInput);
+    if (effectiveRegionKey) {
+      list = list.filter((w) => (w.region?.trim() ?? "") === effectiveRegionKey);
+    }
+    return list;
+  }, [wines, filterInput, effectiveRegionKey]);
+
+  const filtered = useMemo(() => groupWinesByColor(filteredList), [filteredList]);
+
+  const sortedFiltered = useMemo(() => {
+    const out = {} as Record<WineColor, typeof wines>;
+    for (const c of WINE_COLOR_ORDER) {
+      out[c] = sortWines(filtered[c], sortBy, sortDir);
+    }
+    return out;
+  }, [filtered, sortBy, sortDir]);
+
+  const guestCount = wines.length;
+
+  const resetFilters = () => {
+    setNameQuery("");
+    setCountryKeys([]);
+    setRegionKey("");
+    setPriceField("guestBottle");
+    setPriceMinStr("");
+    setPriceMaxStr("");
+    setRatingMinStr("");
   };
-  const countryOptions = data?.facets.countries ?? [];
-  const regionOptions = data?.facets.regions ?? [];
-  const effectiveCountryKeys =
-    data?.filters?.countryKeys ?? filters.countryKeys;
-  const effectiveRegionKey = data?.filters?.regionKey ?? filters.regionKey;
 
-  const filteredTotal = data?.total ?? 0;
-  const visible = data?.items ?? [];
-  const canShowMore = visible.length < filteredTotal;
-
-  const setNameQuery = (value: string) => {
-    replaceUrl({ nameQuery: value }, { clearLimits: true });
-  };
-
-  const setCountryKeys = (value: string[]) => {
-    replaceUrl(
-      {
-        countryKeys: value,
-        ...(value.length === 1 ? {} : { regionKey: "" }),
-      },
-      { clearLimits: true },
-    );
-  };
-
-  const setRegionKey = (value: string) => {
-    replaceUrl({ regionKey: value }, { clearLimits: true });
-  };
-
-  const setPriceField = (value: typeof filters.priceField) => {
-    replaceUrl({ priceField: value }, { clearLimits: true });
-  };
-
-  const setPriceMinStr = (value: string) => {
-    replaceUrl({ priceMinStr: value }, { clearLimits: true });
-  };
-
-  const setPriceMaxStr = (value: string) => {
-    replaceUrl({ priceMaxStr: value }, { clearLimits: true });
-  };
-
-  const setRatingMinStr = (value: string) => {
-    replaceUrl({ ratingMinStr: value }, { clearLimits: true });
-  };
+  const sortOptions: { value: WineSortKey; label: string }[] = [
+    { value: "guestBottlePrice", label: "цена за бутылку" },
+    { value: "guestGlassPrice", label: "цена за бокал" },
+    { value: "vivinoRating", label: "рейтинг Vivino" },
+    { value: "year", label: "год" },
+    { value: "name", label: "название" },
+  ];
 
   return (
     <div className="min-h-full bg-zinc-50 text-zinc-900">
-      <header className="w-full border-b border-zinc-200 bg-white">
-        <div className="mx-auto flex w-full max-w-[82rem] items-center justify-between gap-4 px-4 py-5 sm:px-6">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <span aria-hidden className="text-lg">
-                🥂
-              </span>
-              <h1 className="truncate text-xl font-semibold tracking-tight">
-                Режим гостей
-              </h1>
-            </div>
-            <p className="mt-1 text-sm text-zinc-600">
-              Всего в коллекции {totals.collection} позиций · {totals.bottles} бутылок · сумма
-              закупки {formatTableAmount(totals.value)} (как в таблице, без отдельных
-              «гостевых» цен)
-            </p>
-          </div>
+      <AppHeader
+        emoji="🥂"
+        title="Гостевая карта"
+        subtitle={
+          guestCount === 0
+            ? "Пока нет вин в гостевой карте"
+            : `${guestCount} позиций для гостей`
+        }
+      />
 
-          <Link
-            href="/"
-            className="inline-flex items-center justify-center rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-          >
-            ← Назад
-          </Link>
-        </div>
-      </header>
-
-      <main className="mx-auto w-full max-w-[82rem] px-4 py-8 sm:px-6">
+      <main className="mx-auto w-full max-w-[82rem] px-3 py-4 sm:px-6 sm:py-8">
         {error ? (
           <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
             {error}
           </div>
         ) : null}
 
-        {loading && !data ? (
+        {loading ? (
           <div className="py-16 text-center text-sm text-zinc-500">Загрузка…</div>
         ) : (
           <>
             <WineFiltersBar
-              nameQuery={filters.nameQuery}
+              nameQuery={nameQuery}
               onNameQuery={setNameQuery}
               countryKeys={effectiveCountryKeys}
               onCountryKeys={setCountryKeys}
@@ -121,64 +148,89 @@ function GuestPageContent() {
               regionKey={effectiveRegionKey}
               onRegionKey={setRegionKey}
               regionOptions={regionOptions}
-              priceField={filters.priceField}
+              priceField={priceField}
               onPriceField={setPriceField}
-              priceMin={filters.priceMinStr}
+              priceMin={priceMinStr}
               onPriceMin={setPriceMinStr}
-              priceMax={filters.priceMaxStr}
+              priceMax={priceMaxStr}
               onPriceMax={setPriceMaxStr}
-              ratingMin={filters.ratingMinStr}
+              ratingMin={ratingMinStr}
               onRatingMin={setRatingMinStr}
               onReset={resetFilters}
             />
 
-            <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 px-4 py-3">
-                <h2 className="text-sm font-semibold text-zinc-900">Коллекция</h2>
-                <div className="text-right text-xs text-zinc-500">
-                  <div>Только не выпитые · без кнопок</div>
-                  <div className="mt-0.5">
-                    {filteredTotal} по фильтру
-                    {visible.length < filteredTotal
-                      ? ` · показано ${visible.length} из ${filteredTotal}`
-                      : null}
-                  </div>
-                </div>
-              </div>
+            <SortBar
+              sortBy={sortBy}
+              sortDir={sortDir}
+              onSortBy={setSortBy}
+              onSortDir={setSortDir}
+              options={sortOptions}
+            />
 
-              <WineTable wines={visible} showActions={false} />
+            <div className="space-y-6">
+              {WINE_COLOR_ORDER.some((c) => sortedFiltered[c].length > 0) ? (
+                WINE_COLOR_ORDER.filter((color) => sortedFiltered[color].length > 0).map(
+                  (color) => {
+                    const full = sortedFiltered[color];
+                    const limit = limitByColor[color] ?? WINE_TABLE_PAGE_SIZE;
+                    const visible = full.slice(0, limit);
+                    const canShowMore = full.length > visible.length;
 
-              {canShowMore ? (
-                <div className="border-t border-zinc-100 px-4 py-3">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      replaceUrl({ limit: limit + WINE_TABLE_PAGE_SIZE })
-                    }
-                    className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-100"
-                  >
-                    Показать ещё {WINE_TABLE_PAGE_SIZE}
-                  </button>
+                    return (
+                      <section
+                        key={color}
+                        className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm"
+                      >
+                        <div
+                          className={`flex flex-wrap items-center justify-between gap-2 px-4 py-3 ${WINE_SECTION_HEADER_CLASS[color]}`}
+                        >
+                          <h2 className="text-sm font-semibold">
+                            {WINE_COLOR_LABEL[color]}
+                          </h2>
+                          <div className="text-xs opacity-80">
+                            <div>{full.length} по фильтру</div>
+                            {visible.length < full.length ? (
+                              <div className="mt-0.5">
+                                {visible.length} из {full.length}
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        <GuestWineTable wines={visible} variant="guest" />
+
+                        {canShowMore ? (
+                          <div className="border-t border-zinc-100 px-4 py-3">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setLimitByColor((prev) => ({
+                                  ...prev,
+                                  [color]:
+                                    (prev[color] ?? WINE_TABLE_PAGE_SIZE) +
+                                    WINE_TABLE_PAGE_SIZE,
+                                }))
+                              }
+                              className="min-h-11 w-full rounded-xl border border-zinc-200 bg-zinc-50 text-sm font-medium text-zinc-800 active:bg-zinc-100 sm:rounded-lg sm:py-2"
+                            >
+                              Показать ещё {WINE_TABLE_PAGE_SIZE}
+                            </button>
+                          </div>
+                        ) : null}
+                      </section>
+                    );
+                  },
+                )
+              ) : (
+                <div className="rounded-xl border border-zinc-200 bg-white px-4 py-12 text-center text-sm text-zinc-500">
+                  В гостевой карте пока нет вин. Выберите позиции на главной странице и
+                  сохраните гостевую карту.
                 </div>
-              ) : null}
+              )}
             </div>
           </>
         )}
       </main>
     </div>
-  );
-}
-
-export default function GuestPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="min-h-full bg-zinc-50 py-16 text-center text-sm text-zinc-500">
-          Загрузка…
-        </div>
-      }
-    >
-      <GuestPageContent />
-    </Suspense>
   );
 }

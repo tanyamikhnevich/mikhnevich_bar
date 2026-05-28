@@ -12,6 +12,8 @@
  * Секции **Red / White / Rose / Sparkling** (и русские названия) задают тип; **Sparkling** = игристое.
  * Листы Sold / Flags не используются.
  *
+ * Перед импортом удаляются **все** записи Wine (включая добавленные вручную в UI).
+ *
  * **Год (кол. 5):** число 1800–2100; **N.V.** / NV / NAS / N/A — нет винтажа,
  * сохраняется как `N.V.` (не null и не «—»). См. `lib/wineVintage.ts`.
  */
@@ -20,11 +22,11 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as XLSX from "xlsx";
 
-import type { WineColor } from "../lib/generated/prisma/enums";
-import { prisma } from "../lib/prisma";
-import { normalizeWineGeo } from "../lib/wineNormalize";
-import { parseVintageFromExcel } from "../lib/wineVintage";
-import { parseVivinoFromRatings } from "../lib/wineUtils";
+import type { WineColor } from "@/lib/generated/prisma/enums";
+import { prisma } from "@/lib/prisma";
+import { normalizeWineGeo } from "@/lib/wineNormalize";
+import { parseVintageFromExcel } from "@/lib/wineVintage";
+import { parseVivinoFromRatings } from "@/lib/wineUtils";
 
 const IMPORT_TAG = "[import:My_Wines.xlsx]";
 
@@ -348,10 +350,8 @@ async function main() {
     return;
   }
 
-  const deleted = await prisma.wine.deleteMany({
-    where: { notes: { contains: IMPORT_TAG } },
-  });
-  console.log(`Удалено предыдущих импортов (по метке в notes): ${deleted.count}`);
+  const deleted = await prisma.wine.deleteMany();
+  console.log(`Удалено всех записей в коллекции: ${deleted.count}`);
 
   const chunkSize = 200;
   let inserted = 0;

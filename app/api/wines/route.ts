@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { prisma } from "../../../lib/prisma";
-import { toWineJson } from "../../../lib/mapWineJson";
-import { normalizeWineGeo } from "../../../lib/wineNormalize";
-import { normalizeWineVintage } from "../../../lib/wineVintage";
-import { parseVivinoFromRatings } from "../../../lib/wineUtils";
+import { prisma } from "@/lib/prisma";
+import { toWineJson } from "@/lib/mapWineJson";
+import { parseVivinoFromRatings } from "@/lib/wineUtils";
+import { normalizeWineGeo } from "@/lib/wineNormalize";
+import { normalizeWineVintage } from "@/lib/wineVintage";
 
 /** Полный список (без фильтров). Для UI используйте GET /api/wines/browse. */
 export async function GET() {
@@ -48,10 +48,7 @@ export async function POST(req: Request) {
       ? body.color
       : "red";
 
-  const year =
-    body.year === null || body.year === "" || body.year === undefined
-      ? null
-      : normalizeWineVintage(body.year) ?? null;
+  const year = normalizeWineVintage(body.year) ?? null;
 
   const quantity =
     typeof body.quantity === "number" && Number.isFinite(body.quantity)
@@ -99,7 +96,9 @@ export async function POST(req: Request) {
       originCurrency: currencyOrNull(body.originCurrency),
       israelPrice: parseIntOrNull(body.israelPrice),
       israelCurrency: currencyOrNull(body.israelCurrency),
-      guestPrice: parseIntOrNull(body.guestPrice),
+      isGuestVisible: Boolean(body.isGuestVisible),
+      guestBottlePrice: parseIntOrNull(body.guestBottlePrice ?? body.guestPrice),
+      guestGlassPrice: parseIntOrNull(body.guestGlassPrice),
       purchaseDate:
         purchaseDate && !Number.isNaN(purchaseDate.getTime()) ? purchaseDate : null,
       vivinoRating,

@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import type { Prisma } from "../../../../lib/generated/prisma/client";
-import { prisma } from "../../../../lib/prisma";
-import { toWineJson } from "../../../../lib/mapWineJson";
-import { normalizeWineGeo, normalizeWineText } from "../../../../lib/wineNormalize";
-import { normalizeWineVintage } from "../../../../lib/wineVintage";
-import { parseVivinoFromRatings } from "../../../../lib/wineUtils";
+import { prisma } from "@/lib/prisma";
+import { toWineJson } from "@/lib/mapWineJson";
+import { normalizeWineGeo, normalizeWineText } from "@/lib/wineNormalize";
+import { normalizeWineVintage } from "@/lib/wineVintage";
+import { parseVivinoFromRatings } from "@/lib/wineUtils";
 
 export async function PATCH(
   req: Request,
@@ -25,11 +25,8 @@ export async function PATCH(
   }
 
   if ("year" in body) {
-    if (body.year === null || body.year === "") data.year = null;
-    else {
-      const v = normalizeWineVintage(body.year);
-      if (v !== null && v !== undefined) data.year = v;
-    }
+    const v = normalizeWineVintage(body.year);
+    data.year = v === undefined ? undefined : v;
   }
 
   const geoTouched =
@@ -115,8 +112,22 @@ export async function PATCH(
     return Number.isFinite(n) ? Math.round(n) : null;
   };
 
-  for (const key of ["purchasePrice", "originPrice", "israelPrice", "guestPrice"] as const) {
+  for (const key of [
+    "purchasePrice",
+    "originPrice",
+    "israelPrice",
+    "guestBottlePrice",
+    "guestGlassPrice",
+  ] as const) {
     if (key in body) data[key] = parseIntOrNull(body[key]);
+  }
+
+  if ("guestPrice" in body && !("guestBottlePrice" in body)) {
+    data.guestBottlePrice = parseIntOrNull(body.guestPrice);
+  }
+
+  if (typeof body.isGuestVisible === "boolean") {
+    data.isGuestVisible = body.isGuestVisible;
   }
 
   if ("purchaseDate" in body) {

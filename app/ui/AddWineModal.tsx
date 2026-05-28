@@ -1,22 +1,22 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { NewWineInput, WineColor } from "../../lib/wines";
+import type { NewWineInput, WineColor } from "@/lib/wines";
 import {
   WINE_CURRENCY_OTHER_VALUE,
   WINE_CURRENCY_PRESETS,
   resolveWineCurrencySymbol,
-} from "../../lib/wineCurrencies";
+} from "@/lib/wineCurrencies";
 import {
   canonicalCountryCode,
   getCanonicalCountries,
   WINE_COUNTRY_OTHER_VALUE,
   WINE_REGION_OTHER_VALUE,
-} from "../../lib/wineNormalize";
+} from "@/lib/wineNormalize";
 import {
   parseVintageFromFormInput,
   WINE_VINTAGE_NV,
-} from "../../lib/wineVintage";
+} from "@/lib/wineVintage";
 
 function Field({
   label,
@@ -246,9 +246,11 @@ export function AddWineModal({
 
   useEffect(() => {
     if (!open) return;
-    setForm(createEmptyForm());
-    setRegionOptions([]);
-    setSubmitError(null);
+    queueMicrotask(() => {
+      setForm(createEmptyForm());
+      setRegionOptions([]);
+      setSubmitError(null);
+    });
     void fetch("/api/wines/facets?drank=false", { cache: "no-store" })
       .then((r) => r.json())
       .then((d: { countries?: string[] }) => setDbCountries(d.countries ?? []))
@@ -275,11 +277,11 @@ export function AddWineModal({
 
   useEffect(() => {
     if (!open || !resolvedCountry || isCountryOther) {
-      setRegionOptions([]);
+      queueMicrotask(() => setRegionOptions([]));
       return;
     }
     let cancelled = false;
-    setRegionsLoading(true);
+    queueMicrotask(() => setRegionsLoading(true));
     void fetch(
       `/api/wines/facets?drank=false&country=${encodeURIComponent(resolvedCountry)}`,
       { cache: "no-store" },
@@ -308,7 +310,7 @@ export function AddWineModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black/40 p-3 sm:p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center overflow-hidden bg-black/40 sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="add-wine-title"
@@ -316,7 +318,7 @@ export function AddWineModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="flex max-h-[min(90vh,42rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
+      <div className="flex max-h-[min(92dvh,42rem)] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:max-h-[min(90vh,42rem)] sm:rounded-2xl">
         <div className="flex shrink-0 items-start justify-between gap-4 border-b border-zinc-200 px-5 py-4 sm:px-6">
           <div className="min-w-0">
             <h2 id="add-wine-title" className="text-lg font-semibold text-zinc-900">
@@ -377,7 +379,9 @@ export function AddWineModal({
               originCurrency,
               israelPrice,
               israelCurrency: israelPrice != null ? "₪" : null,
-              guestPrice: null,
+              isGuestVisible: false,
+              guestBottlePrice: null,
+              guestGlassPrice: null,
               purchaseDate: form.purchaseDate.trim() || null,
               vivinoRating: null,
               quantity: parsePositiveInt(form.quantity) ?? 1,

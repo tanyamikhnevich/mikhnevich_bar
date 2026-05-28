@@ -15,7 +15,9 @@ export function toWineJson(w: {
   originCurrency: string | null;
   israelPrice: number | null;
   israelCurrency: string | null;
-  guestPrice: number | null;
+  isGuestVisible: boolean;
+  guestBottlePrice: number | null;
+  guestGlassPrice: number | null;
   purchaseDate: Date | null;
   vivinoRating: number | null;
   quantity: number;
@@ -42,7 +44,9 @@ export function toWineJson(w: {
     originCurrency: w.originCurrency,
     israelPrice: w.israelPrice,
     israelCurrency: w.israelCurrency,
-    guestPrice: w.guestPrice,
+    isGuestVisible: w.isGuestVisible,
+    guestBottlePrice: w.guestBottlePrice,
+    guestGlassPrice: w.guestGlassPrice,
     purchaseDate: w.purchaseDate ? w.purchaseDate.toISOString().slice(0, 10) : null,
     vivinoRating: w.vivinoRating,
     quantity: w.quantity,

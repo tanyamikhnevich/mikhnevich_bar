@@ -5,26 +5,41 @@ import { Suspense, useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AddWineModal } from "./ui/AddWineModal";
 import { DrinkWineModal } from "./ui/DrinkWineModal";
+import { AppHeader } from "./ui/AppHeader";
+import { GuestSelectBar } from "./ui/GuestSelectBar";
+import { SortBar } from "./ui/SortBar";
 import { WineFiltersBar } from "./ui/WineFiltersBar";
 import { SegmentedTabs } from "./ui/SegmentedTabs";
+import { GuestWineTable } from "./ui/GuestWineTable";
 import { WineTable } from "./ui/WineTable";
-import type { Wine, WineColor, WineSortKey } from "../lib/wines";
+import type { GuestSelectionDraft } from "@/lib/guestSelection";
+import {
+  buildGuestSelectionDraft,
+  guestDraftToUpdates,
+  validateGuestSelectionDraft,
+} from "@/lib/guestSelection";
+import type { Wine, WineColor, WineSortKey } from "@/lib/wines";
 import {
   formatTableAmount,
   WINE_COLOR_LABEL,
   WINE_COLOR_ORDER,
   WINE_SECTION_HEADER_CLASS,
-} from "../lib/wines";
-import { useWineBrowseByColor } from "../lib/wineBrowse";
+} from "@/lib/wines";
+import { useWineBrowseByColor } from "@/lib/wineBrowse";
 import {
   addWineApi,
   deleteWineApi,
   drinkWineApi,
+  fetchCollectionWinesApi,
   restoreWineApi,
+  saveGuestMenuApi,
   updateWineApi,
-} from "../lib/wineMutations";
-import { WINE_TABLE_PAGE_SIZE } from "../lib/wineFilters";
-import { homeUrlToBrowseFilters, useHomeWineListUrl } from "../lib/wineUrlState";
+} from "@/lib/wineMutations";
+import {
+  type WinePriceFilterField,
+  WINE_TABLE_PAGE_SIZE,
+} from "@/lib/wineQuery";
+import { homeUrlToBrowseFilters, useHomeWineListUrl } from "@/lib/wineUrlState";
 
 function HomePageContent() {
   const searchParams = useSearchParams();
@@ -33,6 +48,15 @@ function HomePageContent() {
 
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [drinkTarget, setDrinkTarget] = useState<Wine | null>(null);
+  const [guestSelectMode, setGuestSelectMode] = useState(false);
+  const [guestDraft, setGuestDraft] = useState<GuestSelectionDraft>({});
+  const [guestSourceWines, setGuestSourceWines] = useState<Wine[]>([]);
+  const [guestValidationIds, setGuestValidationIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [guestFormError, setGuestFormError] = useState<string | null>(null);
+  const [guestSaving, setGuestSaving] = useState(false);
+  const [guestLoading, setGuestLoading] = useState(false);
 
   const browseFilters = useMemo(
     () => homeUrlToBrowseFilters(searchParams),
@@ -56,10 +80,80 @@ function HomePageContent() {
 
   const setTab = useCallback(
     (value: "collection" | "drank") => {
+      if (guestSelectMode) {
+        setGuestSelectMode(false);
+        setGuestDraft({});
+        setGuestSourceWines([]);
+        setGuestValidationIds(new Set());
+        setGuestFormError(null);
+      }
       replaceUrl({ tab: value }, { clearLimits: true });
     },
-    [replaceUrl],
+    [guestSelectMode, replaceUrl],
   );
+
+  const enterGuestSelectMode = useCallback(() => {
+    setGuestLoading(true);
+    setGuestFormError(null);
+    void fetchCollectionWinesApi()
+      .then((collection) => {
+        setGuestSourceWines(collection);
+        setGuestDraft(buildGuestSelectionDraft(collection));
+        setGuestValidationIds(new Set());
+        setGuestSelectMode(true);
+      })
+      .catch((e) => {
+        setGuestFormError(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => setGuestLoading(false));
+  }, []);
+
+  const exitGuestSelectMode = useCallback(() => {
+    setGuestSelectMode(false);
+    setGuestDraft({});
+    setGuestSourceWines([]);
+    setGuestValidationIds(new Set());
+    setGuestFormError(null);
+  }, []);
+
+  const patchGuestDraft = useCallback(
+    (id: string, patch: Partial<GuestSelectionDraft[string]>) => {
+      setGuestDraft((prev) => ({
+        ...prev,
+        [id]: { ...prev[id], ...patch },
+      }));
+      setGuestValidationIds((prev) => {
+        if (!prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    },
+    [],
+  );
+
+  const handleSaveGuestMenu = useCallback(async () => {
+    const validation = validateGuestSelectionDraft(guestDraft);
+    if (!validation.ok) {
+      setGuestValidationIds(new Set(validation.wineIds));
+      setGuestFormError("Для каждого выбранного вина укажите цену за бутылку");
+      return;
+    }
+    setGuestSaving(true);
+    setGuestFormError(null);
+    setGuestValidationIds(new Set());
+    try {
+      await saveGuestMenuApi(guestDraftToUpdates(guestSourceWines, guestDraft));
+      exitGuestSelectMode();
+      await refetch();
+    } catch (e) {
+      const err = e as Error & { wineIds?: string[] };
+      if (err.wineIds?.length) setGuestValidationIds(new Set(err.wineIds));
+      setGuestFormError(err.message);
+    } finally {
+      setGuestSaving(false);
+    }
+  }, [guestDraft, guestSourceWines, exitGuestSelectMode, refetch]);
 
   const setNameQuery = useCallback(
     (value: string) => {
@@ -89,7 +183,7 @@ function HomePageContent() {
   );
 
   const setPriceField = useCallback(
-    (value: typeof filters.priceField) => {
+    (value: WinePriceFilterField) => {
       replaceUrl({ priceField: value }, { clearLimits: true });
     },
     [replaceUrl],
@@ -181,44 +275,51 @@ function HomePageContent() {
     data &&
     WINE_COLOR_ORDER.some((c) => (data.sections[c]?.total ?? 0) > 0);
 
+  const sortOptions: { value: WineSortKey; label: string }[] = [
+    { value: "purchaseDate", label: "дата покупки" },
+    { value: "purchasePrice", label: "цена покупки" },
+    { value: "israelPrice", label: "цена в Израиле" },
+    { value: "originPrice", label: "цена (оригинал)" },
+    { value: "vivinoRating", label: "рейтинг Vivino" },
+    { value: "year", label: "год" },
+    { value: "name", label: "название" },
+  ];
+
   return (
     <div className="min-h-full bg-zinc-50 text-zinc-900">
-      <header className="w-full border-b border-zinc-200 bg-white">
-        <div className="mx-auto flex w-full max-w-[82rem] items-center justify-between gap-4 px-4 py-5 sm:px-6">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <span aria-hidden className="text-lg">
-                🍷
-              </span>
-              <h1 className="truncate text-xl font-semibold tracking-tight">
-                Моя Коллекция Вин
-              </h1>
-            </div>
-            <p className="mt-1 text-sm text-zinc-600">
-              {totals.bottles} бутылок в коллекции · {formatTableAmount(totals.value)}{" "}
-              сумма закупки (активные)
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3">
+      <AppHeader
+        emoji="🍷"
+        title="Моя коллекция"
+        subtitle={
+          <>
+            {totals.bottles} бут. · закупка {formatTableAmount(totals.value)}
+          </>
+        }
+        actions={
+          <>
             <Link
               href="/guest"
-              className="hidden rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 sm:inline-flex"
+              className="inline-flex min-h-11 items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 active:bg-zinc-50 sm:rounded-lg sm:px-3 sm:py-2"
             >
-              Режим гостей
+              Гости
             </Link>
             <button
               type="button"
               onClick={() => setIsAddOpen(true)}
-              className="inline-flex items-center justify-center rounded-lg bg-rose-700 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-800"
+              className="inline-flex min-h-11 items-center justify-center rounded-xl bg-rose-700 px-4 text-sm font-semibold text-white active:bg-rose-800 sm:rounded-lg sm:px-4 sm:py-2"
             >
-              + Добавить вино
+              + Добавить
             </button>
-          </div>
-        </div>
-      </header>
+          </>
+        }
+      />
 
-      <main className="mx-auto w-full max-w-[82rem] px-4 py-8 sm:px-6">
+      <main
+        className={[
+          "mx-auto w-full max-w-[82rem] px-3 py-4 sm:px-6 sm:py-8",
+          guestSelectMode ? "pb-28 md:pb-8" : "",
+        ].join(" ")}
+      >
         {error ? (
           <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
             {error}
@@ -229,7 +330,7 @@ function HomePageContent() {
           <div className="py-16 text-center text-sm text-zinc-500">Загрузка…</div>
         ) : (
           <>
-            <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+            <div className="mb-4 flex flex-col gap-3 sm:mb-5">
               <SegmentedTabs
                 value={tab}
                 onChange={setTab}
@@ -239,13 +340,26 @@ function HomePageContent() {
                 ]}
               />
 
-              <Link
-                href="/guest"
-                className="inline-flex rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 sm:hidden"
-              >
-                Режим гостей
-              </Link>
+              {tab === "collection" && !guestSelectMode ? (
+                <button
+                  type="button"
+                  onClick={enterGuestSelectMode}
+                  disabled={guestLoading}
+                  className="min-h-11 w-full rounded-xl border border-rose-200 bg-rose-50 px-4 text-sm font-medium text-rose-800 active:bg-rose-100 disabled:opacity-60 sm:w-auto sm:rounded-lg sm:px-3 sm:py-2"
+                >
+                  {guestLoading ? "Загрузка…" : "Выбрать вина для гостей"}
+                </button>
+              ) : null}
             </div>
+
+            {guestSelectMode ? (
+              <GuestSelectBar
+                error={guestFormError}
+                saving={guestSaving}
+                onSave={() => void handleSaveGuestMenu()}
+                onCancel={exitGuestSelectMode}
+              />
+            ) : null}
 
             <WineFiltersBar
               nameQuery={filters.nameQuery}
@@ -267,30 +381,13 @@ function HomePageContent() {
               onReset={resetFilters}
             />
 
-            <div className="mb-5 flex flex-wrap items-center gap-3 rounded-lg border border-zinc-200 bg-white px-4 py-3 text-sm">
-              <span className="font-medium text-zinc-700">Сортировка:</span>
-              <select
-                value={sort.sortBy}
-                onChange={(e) => setSortBy(e.target.value as WineSortKey)}
-                className="h-9 rounded-md border border-zinc-200 bg-white px-2 text-sm text-zinc-900"
-              >
-                <option value="purchaseDate">дата покупки</option>
-                <option value="purchasePrice">цена покупки</option>
-                <option value="israelPrice">цена в Израиле</option>
-                <option value="originPrice">цена (оригинал)</option>
-                <option value="vivinoRating">рейтинг Vivino</option>
-                <option value="year">год</option>
-                <option value="name">название</option>
-              </select>
-              <select
-                value={sort.sortDir}
-                onChange={(e) => setSortDir(e.target.value as "asc" | "desc")}
-                className="h-9 rounded-md border border-zinc-200 bg-white px-2 text-sm text-zinc-900"
-              >
-                <option value="desc">по убыванию</option>
-                <option value="asc">по возрастанию</option>
-              </select>
-            </div>
+            <SortBar
+              sortBy={sort.sortBy}
+              sortDir={sort.sortDir}
+              onSortBy={setSortBy}
+              onSortDir={setSortDir}
+              options={sortOptions}
+            />
 
             <div className="space-y-6">
               {hasAnySection ? (
@@ -305,40 +402,52 @@ function HomePageContent() {
                   return (
                     <section
                       key={color}
-                      className="overflow-x-auto overflow-y-visible rounded-xl border border-zinc-200 bg-white"
+                      className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm"
                     >
                       <div
-                        className={`relative px-4 py-3 ${WINE_SECTION_HEADER_CLASS[color]}`}
+                        className={`flex flex-wrap items-center justify-between gap-2 px-4 py-3 sm:relative ${WINE_SECTION_HEADER_CLASS[color]}`}
                       >
-                        <h2 className="text-center text-sm font-semibold">
+                        <h2 className="text-sm font-semibold">
                           {WINE_COLOR_LABEL[color]}
                         </h2>
-                        <div className="absolute right-4 top-1/2 -translate-y-1/2 text-right text-xs opacity-80">
-                          <div>{total} позиций по фильтру</div>
+                        <div className="text-xs opacity-80 sm:absolute sm:right-4 sm:top-1/2 sm:-translate-y-1/2 sm:text-right">
+                          <div>{total} по фильтру</div>
                           {visible.length < total ? (
                             <div className="mt-0.5">
-                              показано {visible.length} из {total}
+                              {visible.length} из {total}
                             </div>
                           ) : null}
                         </div>
                       </div>
 
-                      <WineTable
-                        wines={visible}
-                        showActions
-                        countryOptions={countryOptions}
-                        onDrink={tab === "collection" ? handleDrink : undefined}
-                        onRestore={tab === "drank" ? handleRestore : undefined}
-                        onUpdate={handleUpdate}
-                        onDelete={handleDelete}
-                      />
+                      {guestSelectMode && tab === "collection" ? (
+                        <GuestWineTable
+                          wines={visible}
+                          variant="guestSelect"
+                          guestSelection={{
+                            draft: guestDraft,
+                            onDraftChange: patchGuestDraft,
+                            invalidIds: guestValidationIds,
+                          }}
+                        />
+                      ) : (
+                        <WineTable
+                          wines={visible}
+                          showActions
+                          countryOptions={countryOptions}
+                          onDrink={tab === "collection" ? handleDrink : undefined}
+                          onRestore={tab === "drank" ? handleRestore : undefined}
+                          onUpdate={handleUpdate}
+                          onDelete={handleDelete}
+                        />
+                      )}
 
                       {canShowMore ? (
                         <div className="border-t border-zinc-100 px-4 py-3">
                           <button
                             type="button"
                             onClick={() => showMore(color)}
-                            className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-100"
+                            className="min-h-11 w-full rounded-xl border border-zinc-200 bg-zinc-50 text-sm font-medium text-zinc-800 active:bg-zinc-100 sm:rounded-lg sm:py-2"
                           >
                             Показать ещё {WINE_TABLE_PAGE_SIZE}
                           </button>

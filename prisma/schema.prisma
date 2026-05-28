@@ -36,7 +36,9 @@ model Wine {
   originCurrency   String?
   israelPrice   Int?
   israelCurrency   String?
-  guestPrice    Int?
+  isGuestVisible   Boolean  @default(false)
+  guestBottlePrice Int?
+  guestGlassPrice  Int?
 
   purchaseDate DateTime?
   vivinoRating Float?

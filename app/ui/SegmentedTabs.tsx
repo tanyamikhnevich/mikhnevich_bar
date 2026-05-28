@@ -15,7 +15,7 @@ export function SegmentedTabs<T extends string>({
   options: Option<T>[];
 }) {
   return (
-    <div className="inline-flex rounded-lg border border-zinc-200 bg-white p-1">
+    <div className="grid w-full grid-cols-2 gap-1 rounded-xl border border-zinc-200 bg-white p-1 sm:inline-flex sm:w-auto sm:grid-cols-none">
       {options.map((opt) => {
         const active = opt.value === value;
         return (
@@ -24,10 +24,10 @@ export function SegmentedTabs<T extends string>({
             type="button"
             onClick={() => onChange(opt.value)}
             className={[
-              "rounded-md px-3 py-2 text-sm font-medium transition-colors",
+              "min-h-11 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors sm:min-h-0 sm:rounded-md sm:py-2",
               active
-                ? "bg-zinc-900 text-white"
-                : "text-zinc-700 hover:bg-zinc-100",
+                ? "bg-zinc-900 text-white shadow-sm"
+                : "text-zinc-700 active:bg-zinc-100 sm:hover:bg-zinc-100",
             ].join(" ")}
           >
             {opt.label}
