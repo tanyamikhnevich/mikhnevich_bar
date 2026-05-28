@@ -7,46 +7,53 @@ import { AddWineModal } from "./ui/AddWineModal";
 import { DrinkWineModal } from "./ui/DrinkWineModal";
 import { WineFiltersBar } from "./ui/WineFiltersBar";
 import { SegmentedTabs } from "./ui/SegmentedTabs";
+import { GuestWineTable } from "./ui/GuestWineTable";
 import { WineTable } from "./ui/WineTable";
-import type { GuestSelectionDraft } from "../lib/guestSelection";
+import type { GuestSelectionDraft } from "@/lib/guestSelection";
 import {
   buildGuestSelectionDraft,
   guestDraftToUpdates,
   validateGuestSelectionDraft,
-} from "../lib/guestSelection";
-import type { Wine, WineColor, WineSortKey } from "../lib/wines";
+} from "@/lib/guestSelection";
+import type { Wine, WineColor, WineSortKey } from "@/lib/wines";
 import {
   formatTableAmount,
   WINE_COLOR_LABEL,
   WINE_COLOR_ORDER,
   WINE_SECTION_HEADER_CLASS,
-} from "../lib/wines";
-import { useWineBrowseByColor } from "../lib/wineBrowse";
+} from "@/lib/wines";
+import { useWineBrowseByColor } from "@/lib/wineBrowse";
 import {
   addWineApi,
   deleteWineApi,
   drinkWineApi,
+  fetchCollectionWinesApi,
   restoreWineApi,
+  saveGuestMenuApi,
   updateWineApi,
-} from "../lib/wineMutations";
-import { WINE_TABLE_PAGE_SIZE } from "../lib/wineFilters";
-import { homeUrlToBrowseFilters, useHomeWineListUrl } from "../lib/wineUrlState";
+} from "@/lib/wineMutations";
+import {
+  type WinePriceFilterField,
+  WINE_TABLE_PAGE_SIZE,
+} from "@/lib/wineQuery";
+import { homeUrlToBrowseFilters, useHomeWineListUrl } from "@/lib/wineUrlState";
 
 function HomePageContent() {
   const searchParams = useSearchParams();
   const { state, replaceUrl, resetFilters } = useHomeWineListUrl();
   const { tab, filters, sort, limits } = state;
 
-export default function Home() {
-  const { wines, loading, error, addWine, updateWine, saveGuestMenu, totals } = useWines();
-  const [guestSelectMode, setGuestSelectMode] = useState(false);
-  const [guestDraft, setGuestDraft] = useState<GuestSelectionDraft>({});
-  const [guestValidationIds, setGuestValidationIds] = useState<Set<string>>(new Set());
-  const [guestFormError, setGuestFormError] = useState<string | null>(null);
-  const [guestSaving, setGuestSaving] = useState(false);
-  const [tab, setTab] = useState<"collection" | "drank">("collection");
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [drinkTarget, setDrinkTarget] = useState<Wine | null>(null);
+  const [guestSelectMode, setGuestSelectMode] = useState(false);
+  const [guestDraft, setGuestDraft] = useState<GuestSelectionDraft>({});
+  const [guestSourceWines, setGuestSourceWines] = useState<Wine[]>([]);
+  const [guestValidationIds, setGuestValidationIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [guestFormError, setGuestFormError] = useState<string | null>(null);
+  const [guestSaving, setGuestSaving] = useState(false);
+  const [guestLoading, setGuestLoading] = useState(false);
 
   const browseFilters = useMemo(
     () => homeUrlToBrowseFilters(searchParams),
@@ -70,10 +77,80 @@ export default function Home() {
 
   const setTab = useCallback(
     (value: "collection" | "drank") => {
+      if (guestSelectMode) {
+        setGuestSelectMode(false);
+        setGuestDraft({});
+        setGuestSourceWines([]);
+        setGuestValidationIds(new Set());
+        setGuestFormError(null);
+      }
       replaceUrl({ tab: value }, { clearLimits: true });
     },
-    [replaceUrl],
+    [guestSelectMode, replaceUrl],
   );
+
+  const enterGuestSelectMode = useCallback(() => {
+    setGuestLoading(true);
+    setGuestFormError(null);
+    void fetchCollectionWinesApi()
+      .then((collection) => {
+        setGuestSourceWines(collection);
+        setGuestDraft(buildGuestSelectionDraft(collection));
+        setGuestValidationIds(new Set());
+        setGuestSelectMode(true);
+      })
+      .catch((e) => {
+        setGuestFormError(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => setGuestLoading(false));
+  }, []);
+
+  const exitGuestSelectMode = useCallback(() => {
+    setGuestSelectMode(false);
+    setGuestDraft({});
+    setGuestSourceWines([]);
+    setGuestValidationIds(new Set());
+    setGuestFormError(null);
+  }, []);
+
+  const patchGuestDraft = useCallback(
+    (id: string, patch: Partial<GuestSelectionDraft[string]>) => {
+      setGuestDraft((prev) => ({
+        ...prev,
+        [id]: { ...prev[id], ...patch },
+      }));
+      setGuestValidationIds((prev) => {
+        if (!prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    },
+    [],
+  );
+
+  const handleSaveGuestMenu = useCallback(async () => {
+    const validation = validateGuestSelectionDraft(guestDraft);
+    if (!validation.ok) {
+      setGuestValidationIds(new Set(validation.wineIds));
+      setGuestFormError("Для каждого выбранного вина укажите цену за бутылку");
+      return;
+    }
+    setGuestSaving(true);
+    setGuestFormError(null);
+    setGuestValidationIds(new Set());
+    try {
+      await saveGuestMenuApi(guestDraftToUpdates(guestSourceWines, guestDraft));
+      exitGuestSelectMode();
+      await refetch();
+    } catch (e) {
+      const err = e as Error & { wineIds?: string[] };
+      if (err.wineIds?.length) setGuestValidationIds(new Set(err.wineIds));
+      setGuestFormError(err.message);
+    } finally {
+      setGuestSaving(false);
+    }
+  }, [guestDraft, guestSourceWines, exitGuestSelectMode, refetch]);
 
   const setNameQuery = useCallback(
     (value: string) => {
@@ -94,8 +171,6 @@ export default function Home() {
     },
     [replaceUrl],
   );
-  const [sortBy, setSortBy] = useState<WineSortKey>("purchasePrice");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   const setRegionKey = useCallback(
     (value: string) => {
@@ -105,7 +180,7 @@ export default function Home() {
   );
 
   const setPriceField = useCallback(
-    (value: typeof filters.priceField) => {
+    (value: WinePriceFilterField) => {
       replaceUrl({ priceField: value }, { clearLimits: true });
     },
     [replaceUrl],
@@ -168,66 +243,6 @@ export default function Home() {
     [refetch],
   );
 
-  const enterGuestSelectMode = () => {
-    setGuestDraft(buildGuestSelectionDraft(tabWines));
-    setGuestValidationIds(new Set());
-    setGuestFormError(null);
-    setGuestSelectMode(true);
-  };
-
-  const exitGuestSelectMode = () => {
-    setGuestSelectMode(false);
-    setGuestDraft({});
-    setGuestValidationIds(new Set());
-    setGuestFormError(null);
-  };
-
-  const patchGuestDraft = (
-    id: string,
-    patch: Partial<GuestSelectionDraft[string]>,
-  ) => {
-    setGuestDraft((prev) => ({
-      ...prev,
-      [id]: { ...prev[id], ...patch },
-    }));
-    setGuestValidationIds((prev) => {
-      if (!prev.has(id)) return prev;
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-  };
-
-  const handleSaveGuestMenu = async () => {
-    const validation = validateGuestSelectionDraft(guestDraft);
-    if (!validation.ok) {
-      setGuestValidationIds(new Set(validation.wineIds));
-      setGuestFormError("Для каждого выбранного вина укажите цену за бутылку");
-      return;
-    }
-    setGuestSaving(true);
-    setGuestFormError(null);
-    setGuestValidationIds(new Set());
-    try {
-      await saveGuestMenu(guestDraftToUpdates(tabWines, guestDraft));
-      exitGuestSelectMode();
-    } catch (e) {
-      const err = e as Error & { wineIds?: string[] };
-      if (err.wineIds?.length) setGuestValidationIds(new Set(err.wineIds));
-      setGuestFormError(err.message);
-    } finally {
-      setGuestSaving(false);
-    }
-  };
-
-  const resetFilters = () => {
-    setNameQuery("");
-    setCountryKey("");
-    setPriceField("purchase");
-    setPriceMinStr("");
-    setPriceMaxStr("");
-    setRatingMinStr("");
-  };
   const handleRestore = useCallback(
     (wine: Wine) => {
       void restoreWineApi(wine.id)
@@ -308,10 +323,7 @@ export default function Home() {
             <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
               <SegmentedTabs
                 value={tab}
-                onChange={(v) => {
-                  if (guestSelectMode) exitGuestSelectMode();
-                  setTab(v);
-                }}
+                onChange={setTab}
                 options={[
                   { value: "collection", label: `Коллекция (${totals.collection})` },
                   { value: "drank", label: `Выпито (${totals.drank})` },
@@ -323,9 +335,10 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={enterGuestSelectMode}
-                    className="inline-flex rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-800 hover:bg-rose-100"
+                    disabled={guestLoading}
+                    className="inline-flex rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-800 hover:bg-rose-100 disabled:opacity-60"
                   >
-                    Выбрать вина для гостей
+                    {guestLoading ? "Загрузка…" : "Выбрать вина для гостей"}
                   </button>
                 ) : null}
                 <Link
@@ -444,36 +457,27 @@ export default function Home() {
                         </div>
                       </div>
 
-                      <WineTable
-                        wines={visible}
-                        showActions
-                        countryOptions={countryOptions}
-                        onDrink={tab === "collection" ? handleDrink : undefined}
-                        onRestore={tab === "drank" ? handleRestore : undefined}
-                        onUpdate={handleUpdate}
-                        onDelete={handleDelete}
-                      />
-                        {guestSelectMode && tab === "collection" ? (
-                          <WineTable
-                            wines={visible}
-                            variant="guestSelect"
-                            guestSelection={{
-                              draft: guestDraft,
-                              onDraftChange: patchGuestDraft,
-                              invalidIds: guestValidationIds,
-                            }}
-                          />
-                        ) : (
-                          <WineTable
-                            wines={visible}
-                            showActions
-                            onToggleDrank={(id, drank) =>
-                              void updateWine(id, { drank }).catch((e) =>
-                                alert(e instanceof Error ? e.message : String(e)),
-                              )
-                            }
-                          />
-                        )}
+                      {guestSelectMode && tab === "collection" ? (
+                        <GuestWineTable
+                          wines={visible}
+                          variant="guestSelect"
+                          guestSelection={{
+                            draft: guestDraft,
+                            onDraftChange: patchGuestDraft,
+                            invalidIds: guestValidationIds,
+                          }}
+                        />
+                      ) : (
+                        <WineTable
+                          wines={visible}
+                          showActions
+                          countryOptions={countryOptions}
+                          onDrink={tab === "collection" ? handleDrink : undefined}
+                          onRestore={tab === "drank" ? handleRestore : undefined}
+                          onUpdate={handleUpdate}
+                          onDelete={handleDelete}
+                        />
+                      )}
 
                       {canShowMore ? (
                         <div className="border-t border-zinc-100 px-4 py-3">

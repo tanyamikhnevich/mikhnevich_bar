@@ -1,22 +1,22 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { NewWineInput, WineColor } from "../../lib/wines";
+import type { NewWineInput, WineColor } from "@/lib/wines";
 import {
   WINE_CURRENCY_OTHER_VALUE,
   WINE_CURRENCY_PRESETS,
   resolveWineCurrencySymbol,
-} from "../../lib/wineCurrencies";
+} from "@/lib/wineCurrencies";
 import {
   canonicalCountryCode,
   getCanonicalCountries,
   WINE_COUNTRY_OTHER_VALUE,
   WINE_REGION_OTHER_VALUE,
-} from "../../lib/wineNormalize";
+} from "@/lib/wineNormalize";
 import {
   parseVintageFromFormInput,
   WINE_VINTAGE_NV,
-} from "../../lib/wineVintage";
+} from "@/lib/wineVintage";
 
 function Field({
   label,
@@ -246,9 +246,11 @@ export function AddWineModal({
 
   useEffect(() => {
     if (!open) return;
-    setForm(createEmptyForm());
-    setRegionOptions([]);
-    setSubmitError(null);
+    queueMicrotask(() => {
+      setForm(createEmptyForm());
+      setRegionOptions([]);
+      setSubmitError(null);
+    });
     void fetch("/api/wines/facets?drank=false", { cache: "no-store" })
       .then((r) => r.json())
       .then((d: { countries?: string[] }) => setDbCountries(d.countries ?? []))
@@ -275,11 +277,11 @@ export function AddWineModal({
 
   useEffect(() => {
     if (!open || !resolvedCountry || isCountryOther) {
-      setRegionOptions([]);
+      queueMicrotask(() => setRegionOptions([]));
       return;
     }
     let cancelled = false;
-    setRegionsLoading(true);
+    queueMicrotask(() => setRegionsLoading(true));
     void fetch(
       `/api/wines/facets?drank=false&country=${encodeURIComponent(resolvedCountry)}`,
       { cache: "no-store" },
@@ -377,7 +379,9 @@ export function AddWineModal({
               originCurrency,
               israelPrice,
               israelCurrency: israelPrice != null ? "₪" : null,
-              guestPrice: null,
+              isGuestVisible: false,
+              guestBottlePrice: null,
+              guestGlassPrice: null,
               purchaseDate: form.purchaseDate.trim() || null,
               vivinoRating: null,
               quantity: parsePositiveInt(form.quantity) ?? 1,

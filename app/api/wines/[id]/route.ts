@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
 import type { Prisma } from "../../../../lib/generated/prisma/client";
-import { prisma } from "../../../../lib/prisma";
-import { toWineJson } from "../../../../lib/mapWineJson";
-import { normalizeWineGeo, normalizeWineText } from "../../../../lib/wineNormalize";
-import { normalizeWineVintage } from "../../../../lib/wineVintage";
-import { parseVivinoFromRatings } from "../../../../lib/wineUtils";
-import { normalizeWineYear, parseVivinoFromRatings } from "../../../../lib/wineUtils";
+import { prisma } from "@/lib/prisma";
+import { toWineJson } from "@/lib/mapWineJson";
+import { normalizeWineGeo, normalizeWineText } from "@/lib/wineNormalize";
+import { normalizeWineVintage } from "@/lib/wineVintage";
+import { parseVivinoFromRatings } from "@/lib/wineUtils";
 
 export async function PATCH(
   req: Request,
@@ -26,12 +25,8 @@ export async function PATCH(
   }
 
   if ("year" in body) {
-    data.year = normalizeWineYear(body.year);
-    if (body.year === null || body.year === "") data.year = null;
-    else {
-      const v = normalizeWineVintage(body.year);
-      if (v !== null && v !== undefined) data.year = v;
-    }
+    const v = normalizeWineVintage(body.year);
+    data.year = v === undefined ? undefined : v;
   }
 
   const geoTouched =

@@ -1,17 +1,15 @@
 import type { Wine } from "./wines";
 
-export const WINE_TABLE_PAGE_SIZE = 15;
-
-export type WinePriceFilterField =
-  | "purchase"
-  | "israel"
-  | "origin"
-  | "guestBottle"
-  | "guestGlass";
+export {
+  WINE_TABLE_PAGE_SIZE,
+  type WinePriceFilterField,
+} from "./wineQuery";
+import type { WinePriceFilterField } from "./wineQuery";
 
 export type WineListFilterInput = {
   nameQuery: string;
-  countryKey: string;
+  countryKey?: string;
+  countryKeys?: string[];
   priceField: WinePriceFilterField;
   priceMin: number | null;
   priceMax: number | null;
@@ -62,8 +60,15 @@ export function filterWinesByToolbar(items: Wine[], f: WineListFilterInput): Win
   const q = f.nameQuery.trim().toLowerCase();
   return items.filter((w) => {
     if (q && !w.name.toLowerCase().includes(q)) return false;
-    if (f.countryKey) {
-      if (wineCountryFilterKey(w) !== f.countryKey) return false;
+    const countries =
+      f.countryKeys && f.countryKeys.length > 0
+        ? f.countryKeys
+        : f.countryKey
+          ? [f.countryKey]
+          : [];
+    if (countries.length > 0) {
+      const key = wineCountryFilterKey(w);
+      if (!key || !countries.includes(key)) return false;
     }
     const price = winePriceByField(w, f.priceField);
     if (f.priceMin != null) {
@@ -89,10 +94,3 @@ export function parseOptionalPositiveNumber(raw: string): number | null {
   if (!Number.isFinite(n) || n < 0) return null;
   return n;
 }
-export {
-  WINE_TABLE_PAGE_SIZE,
-  parseOptionalPositiveNumber,
-  type WinePriceFilterField,
-  type WineBrowseFilters as WineListFilterInput,
-  type WineSortKey,
-} from "./wineQuery";

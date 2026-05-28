@@ -21,18 +21,8 @@ export const WINE_SECTION_HEADER_CLASS: Record<WineColor, string> = {
   sparkling: "border-b border-stone-300/70 bg-[#ebe4dc] text-stone-800",
 };
 
-export type WineSortKey =
-  | "none"
-  | "purchaseDate"
-  | "purchasePrice"
-  | "israelPrice"
-  | "originPrice"
-  | "guestBottlePrice"
-  | "guestGlassPrice"
-  | "vivinoRating"
-  | "name"
-  | "year";
 export type { WineSortKey } from "./wineQuery";
+import type { WineSortKey } from "./wineQuery";
 
 export type Wine = {
   id: string;
@@ -51,7 +41,9 @@ export type Wine = {
   originCurrency?: string | null;
   israelPrice?: number | null;
   israelCurrency?: string | null;
-  guestPrice?: number | null;
+  isGuestVisible?: boolean;
+  guestBottlePrice?: number | null;
+  guestGlassPrice?: number | null;
   purchaseDate?: string | null;
   vivinoRating?: number | null;
   quantity: number;
@@ -133,7 +125,6 @@ export function sortWines(
   key: WineSortKey,
   dir: "asc" | "desc",
 ): Wine[] {
-  if (key === "none") return [...items];
   const m = dir === "asc" ? 1 : -1;
 
   const cmpNum = (a: number | null | undefined, b: number | null | undefined) => {

@@ -1,5 +1,6 @@
 "use client";
 
+import type { GuestWineUpdate } from "./guestWineApi";
 import type { NewWineInput, Wine } from "./wines";
 
 async function parseErrorMessage(res: Response) {
@@ -31,7 +32,9 @@ export async function addWineApi(input: NewWineInput): Promise<void> {
       originCurrency: input.originCurrency || null,
       israelPrice: input.israelPrice,
       israelCurrency: input.israelCurrency || null,
-      guestPrice: input.guestPrice ?? null,
+      isGuestVisible: Boolean(input.isGuestVisible),
+      guestBottlePrice: input.guestBottlePrice ?? null,
+      guestGlassPrice: input.guestGlassPrice ?? null,
       purchaseDate: input.purchaseDate || null,
       vivinoRating: input.vivinoRating ?? null,
       quantity: input.quantity ?? 1,
@@ -80,4 +83,28 @@ export async function updateWineApi(
 export async function deleteWineApi(id: string): Promise<void> {
   const res = await fetch(`/api/wines/${id}`, { method: "DELETE" });
   if (!res.ok) throw new Error(await parseErrorMessage(res));
+}
+
+export async function fetchCollectionWinesApi(): Promise<Wine[]> {
+  const res = await fetch("/api/wines", { cache: "no-store" });
+  if (!res.ok) throw new Error(await parseErrorMessage(res));
+  const data = (await res.json()) as Wine[];
+  return data.filter((w) => !w.drank);
+}
+
+export async function saveGuestMenuApi(items: GuestWineUpdate[]): Promise<void> {
+  const res = await fetch("/api/wines/guest", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ items }),
+  });
+  if (!res.ok) {
+    const j = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      wineIds?: string[];
+    };
+    const err = new Error(j.error ?? res.statusText) as Error & { wineIds?: string[] };
+    err.wineIds = j.wineIds;
+    throw err;
+  }
 }

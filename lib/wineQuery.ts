@@ -4,13 +4,20 @@ export const WINE_TABLE_PAGE_SIZE = 15;
 export const WINE_COLOR_ORDER = ["red", "white", "rose", "sparkling"] as const;
 export type WineColor = (typeof WINE_COLOR_ORDER)[number];
 
-export type WinePriceFilterField = "purchase" | "israel" | "origin";
+export type WinePriceFilterField =
+  | "purchase"
+  | "israel"
+  | "origin"
+  | "guestBottle"
+  | "guestGlass";
 
 export type WineSortKey =
   | "purchaseDate"
   | "purchasePrice"
   | "israelPrice"
   | "originPrice"
+  | "guestBottlePrice"
+  | "guestGlassPrice"
   | "vivinoRating"
   | "name"
   | "year";
@@ -72,7 +79,10 @@ export function parseWineBrowseFilters(
 
   const priceFieldRaw = searchParams.get("priceField");
   const priceField: WinePriceFilterField =
-    priceFieldRaw === "israel" || priceFieldRaw === "origin"
+    priceFieldRaw === "israel" ||
+    priceFieldRaw === "origin" ||
+    priceFieldRaw === "guestBottle" ||
+    priceFieldRaw === "guestGlass"
       ? priceFieldRaw
       : "purchase";
 
@@ -82,6 +92,8 @@ export function parseWineBrowseFilters(
     "purchasePrice",
     "israelPrice",
     "originPrice",
+    "guestBottlePrice",
+    "guestGlassPrice",
     "vivinoRating",
     "name",
     "year",
@@ -139,12 +151,21 @@ export function parseFlatPagination(searchParams: URLSearchParams): {
 
 function priceFieldColumn(
   field: WinePriceFilterField,
-): "purchasePrice" | "israelPrice" | "originPrice" {
+):
+  | "purchasePrice"
+  | "israelPrice"
+  | "originPrice"
+  | "guestBottlePrice"
+  | "guestGlassPrice" {
   switch (field) {
     case "israel":
       return "israelPrice";
     case "origin":
       return "originPrice";
+    case "guestBottle":
+      return "guestBottlePrice";
+    case "guestGlass":
+      return "guestGlassPrice";
     default:
       return "purchasePrice";
   }
@@ -199,7 +220,14 @@ export function buildWineBrowseWhere(
 }
 
 function nullableSort(
-  field: "purchasePrice" | "israelPrice" | "originPrice" | "vivinoRating" | "year",
+  field:
+    | "purchasePrice"
+    | "israelPrice"
+    | "originPrice"
+    | "guestBottlePrice"
+    | "guestGlassPrice"
+    | "vivinoRating"
+    | "year",
   dir: "asc" | "desc",
 ): Prisma.WineOrderByWithRelationInput {
   return { [field]: { sort: dir, nulls: "last" } };
@@ -221,6 +249,10 @@ export function buildWineOrderBy(
       return [nullableSort("israelPrice", dir), tie];
     case "originPrice":
       return [nullableSort("originPrice", dir), tie];
+    case "guestBottlePrice":
+      return [nullableSort("guestBottlePrice", dir), tie];
+    case "guestGlassPrice":
+      return [nullableSort("guestGlassPrice", dir), tie];
     case "vivinoRating":
       return [nullableSort("vivinoRating", dir), tie];
     case "year":

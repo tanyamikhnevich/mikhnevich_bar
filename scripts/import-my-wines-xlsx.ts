@@ -20,12 +20,11 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as XLSX from "xlsx";
 
-import type { WineColor } from "../lib/generated/prisma/enums";
-import { prisma } from "../lib/prisma";
-import { normalizeWineGeo } from "../lib/wineNormalize";
-import { parseVintageFromExcel } from "../lib/wineVintage";
-import { parseVivinoFromRatings } from "../lib/wineUtils";
-import { normalizeWineYear, parseVivinoFromRatings } from "../lib/wineUtils";
+import type { WineColor } from "@/lib/generated/prisma/enums";
+import { prisma } from "@/lib/prisma";
+import { normalizeWineGeo } from "@/lib/wineNormalize";
+import { parseVintageFromExcel } from "@/lib/wineVintage";
+import { parseVivinoFromRatings } from "@/lib/wineUtils";
 
 const IMPORT_TAG = "[import:My_Wines.xlsx]";
 
@@ -73,10 +72,6 @@ function parsePricePairs(row: unknown[]): PricePair[] {
     pairs.push({ amount, currency });
   }
   return pairs;
-}
-
-function parseYear(raw: unknown): string | null {
-  return normalizeWineYear(raw);
 }
 
 function parseQuantity(raw: unknown): number {

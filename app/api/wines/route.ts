@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
-import { prisma } from "../../../lib/prisma";
-import { toWineJson } from "../../../lib/mapWineJson";
-import { normalizeWineYear, parseVivinoFromRatings } from "../../../lib/wineUtils";
-import { normalizeWineGeo } from "../../../lib/wineNormalize";
-import { normalizeWineVintage } from "../../../lib/wineVintage";
-import { parseVivinoFromRatings } from "../../../lib/wineUtils";
+import { prisma } from "@/lib/prisma";
+import { toWineJson } from "@/lib/mapWineJson";
+import { parseVivinoFromRatings } from "@/lib/wineUtils";
+import { normalizeWineGeo } from "@/lib/wineNormalize";
+import { normalizeWineVintage } from "@/lib/wineVintage";
 
 /** Полный список (без фильтров). Для UI используйте GET /api/wines/browse. */
 export async function GET() {
@@ -49,11 +48,7 @@ export async function POST(req: Request) {
       ? body.color
       : "red";
 
-  const year =
-    body.year === null || body.year === "" || body.year === undefined
-      ? null
-      : normalizeWineVintage(body.year) ?? null;
-  const year = normalizeWineYear(body.year);
+  const year = normalizeWineVintage(body.year) ?? null;
 
   const quantity =
     typeof body.quantity === "number" && Number.isFinite(body.quantity)
