@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { WineFiltersBar } from "../ui/WineFiltersBar";
 import { WineTable } from "../ui/WineTable";
@@ -88,7 +87,7 @@ export default function GuestPage() {
   return (
     <div className="min-h-full bg-zinc-50 text-zinc-900">
       <header className="w-full border-b border-zinc-200 bg-white">
-        <div className="mx-auto flex w-full max-w-[82rem] items-center justify-between gap-4 px-4 py-5 sm:px-6">
+        <div className="mx-auto w-full max-w-[82rem] px-4 py-5 sm:px-6">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <span aria-hidden className="text-lg">
@@ -104,13 +103,6 @@ export default function GuestPage() {
                 : `${guestCount} позиций в гостевой карте`}
             </p>
           </div>
-
-          <Link
-            href="/"
-            className="inline-flex items-center justify-center rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-          >
-            ← Назад
-          </Link>
         </div>
       </header>
 
