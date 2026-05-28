@@ -11,6 +11,9 @@
  * ниже ячейки **Done** в первом столбце — берётся **более поздняя** из двух границ.
  * Секции **Red / White / Rose / Sparkling** (и русские названия) задают тип; **Sparkling** = игристое.
  * Листы Sold / Flags не используются.
+ *
+ * **Год (кол. 5):** число 1800–2100; **N.V.** / NV / NAS / N/A — нет винтажа,
+ * сохраняется как `N.V.` (не null и не «—»). См. `lib/wineVintage.ts`.
  */
 import "dotenv/config";
 import * as fs from "node:fs";
@@ -19,6 +22,9 @@ import * as XLSX from "xlsx";
 
 import type { WineColor } from "../lib/generated/prisma/enums";
 import { prisma } from "../lib/prisma";
+import { normalizeWineGeo } from "../lib/wineNormalize";
+import { parseVintageFromExcel } from "../lib/wineVintage";
+import { parseVivinoFromRatings } from "../lib/wineUtils";
 import { normalizeWineYear, parseVivinoFromRatings } from "../lib/wineUtils";
 
 const IMPORT_TAG = "[import:My_Wines.xlsx]";
@@ -136,41 +142,6 @@ function normalizeCurrencySymbol(raw: string | undefined): string | null {
   const t = (raw ?? "").trim();
   if (!t) return null;
   return t.slice(0, 8);
-}
-
-const COUNTRY_TO_ISO: Record<string, string> = {
-  italy: "IT",
-  france: "FR",
-  israel: "IL",
-  spain: "ES",
-  usa: "US",
-  portugal: "PT",
-  australia: "AU",
-  argentina: "AR",
-  chile: "CL",
-  germany: "DE",
-  "new zealand": "NZ",
-  uk: "GB",
-  japan: "JP",
-  ireland: "IE",
-  scotland: "GB",
-  greece: "GR",
-  georgia: "GE",
-  hungary: "HU",
-  austria: "AT",
-  moldova: "MD",
-  romania: "RO",
-  uruguay: "UY",
-  "south africa": "ZA",
-  canada: "CA",
-  china: "CN",
-  lebanon: "LB",
-};
-
-function countryToIso(country: string | null): string | null {
-  if (!country) return null;
-  const k = country.trim().toLowerCase();
-  return COUNTRY_TO_ISO[k] ?? null;
 }
 
 function findDoneRowIndex(rows: unknown[][]): number {
@@ -293,12 +264,14 @@ function parseWineRows(wb: XLSX.WorkBook): {
     const purchaseDate =
       c0 instanceof Date ? c0 : typeof c0 === "number" ? new Date(Math.round((c0 - 25569) * 86400 * 1000)) : null;
 
-    const year = parseYear(row[4]);
+    const year = parseVintageFromExcel(row[4]);
     const quantity = parseQuantity(row[5]);
-    const country = String(row[7] ?? "").trim() || null;
-    const region = String(row[8] ?? "").trim() || null;
-    const subregion = String(row[9] ?? "").trim() || null;
-    const grape = String(row[10] ?? "").trim() || null;
+    const geo = normalizeWineGeo({
+      country: String(row[7] ?? "").trim() || null,
+      region: String(row[8] ?? "").trim() || null,
+      subregion: String(row[9] ?? "").trim() || null,
+      grape: String(row[10] ?? "").trim() || null,
+    });
 
     const pairs = parsePricePairs(row);
     const {
@@ -313,19 +286,17 @@ function parseWineRows(wb: XLSX.WorkBook): {
     const ratings = ratingsRaw || null;
     const vivinoRating = parseVivinoFromRatings(ratingsRaw);
 
-    const countryCode = countryToIso(country);
-
     const notes = `${IMPORT_TAG} row ${i + 1}`;
 
     wines.push({
       name,
       producer,
       year,
-      country,
-      countryCode,
-      region,
-      subregion,
-      grape,
+      country: geo.country,
+      countryCode: geo.countryCode,
+      region: geo.region,
+      subregion: geo.subregion,
+      grape: geo.grape,
       ratings,
       purchasePrice,
       purchaseCurrency,

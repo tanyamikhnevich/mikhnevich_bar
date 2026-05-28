@@ -1,0 +1,83 @@
+"use client";
+
+import type { NewWineInput, Wine } from "./wines";
+
+async function parseErrorMessage(res: Response) {
+  try {
+    const j = (await res.json()) as { error?: string };
+    return j.error ?? res.statusText;
+  } catch {
+    return res.statusText;
+  }
+}
+
+export async function addWineApi(input: NewWineInput): Promise<void> {
+  const res = await fetch("/api/wines", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: input.name,
+      producer: input.producer,
+      year: input.year,
+      country: input.country || null,
+      countryCode: input.countryCode || null,
+      region: input.region || null,
+      subregion: input.subregion || null,
+      grape: input.grape || null,
+      ratings: input.ratings || null,
+      purchasePrice: input.purchasePrice,
+      purchaseCurrency: input.purchaseCurrency || null,
+      originPrice: input.originPrice,
+      originCurrency: input.originCurrency || null,
+      israelPrice: input.israelPrice,
+      israelCurrency: input.israelCurrency || null,
+      guestPrice: input.guestPrice ?? null,
+      purchaseDate: input.purchaseDate || null,
+      vivinoRating: input.vivinoRating ?? null,
+      quantity: input.quantity ?? 1,
+      color: input.color,
+      drank: Boolean(input.drank),
+      notes: input.notes || null,
+    }),
+  });
+  if (!res.ok) throw new Error(await parseErrorMessage(res));
+}
+
+export type DrinkApiResponse = {
+  mode: "moved" | "split";
+  active: Wine;
+  drank: Wine;
+};
+
+export async function drinkWineApi(id: string, quantity = 1): Promise<DrinkApiResponse> {
+  const res = await fetch(`/api/wines/${id}/drink`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ quantity }),
+  });
+  if (!res.ok) throw new Error(await parseErrorMessage(res));
+  return (await res.json()) as DrinkApiResponse;
+}
+
+export async function restoreWineApi(id: string): Promise<void> {
+  const res = await fetch(`/api/wines/${id}/restore`, { method: "POST" });
+  if (!res.ok) throw new Error(await parseErrorMessage(res));
+}
+
+export async function updateWineApi(
+  id: string,
+  patch: Record<string, unknown>,
+): Promise<Wine> {
+  const res = await fetch(`/api/wines/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw new Error(await parseErrorMessage(res));
+  return (await res.json()) as Wine;
+}
+
+export async function deleteWineApi(id: string): Promise<void> {
+  const res = await fetch(`/api/wines/${id}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(await parseErrorMessage(res));
+}

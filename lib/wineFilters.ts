@@ -89,3 +89,10 @@ export function parseOptionalPositiveNumber(raw: string): number | null {
   if (!Number.isFinite(n) || n < 0) return null;
   return n;
 }
+export {
+  WINE_TABLE_PAGE_SIZE,
+  parseOptionalPositiveNumber,
+  type WinePriceFilterField,
+  type WineBrowseFilters as WineListFilterInput,
+  type WineSortKey,
+} from "./wineQuery";

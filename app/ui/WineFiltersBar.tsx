@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { WinePriceFilterField } from "../../lib/wineFilters";
 
 const SEARCH_DEBOUNCE_MS = 320;
@@ -8,9 +8,12 @@ const SEARCH_DEBOUNCE_MS = 320;
 type Props = {
   nameQuery: string;
   onNameQuery: (v: string) => void;
-  countryKey: string;
-  onCountryKey: (v: string) => void;
+  countryKeys: string[];
+  onCountryKeys: (v: string[]) => void;
   countryOptions: string[];
+  regionKey: string;
+  onRegionKey: (v: string) => void;
+  regionOptions: string[];
   priceField: WinePriceFilterField;
   onPriceField: (v: WinePriceFilterField) => void;
   priceMin: string;
@@ -30,12 +33,114 @@ const PRICE_LABEL: Record<WinePriceFilterField, string> = {
   guestGlass: "бокал (гость)",
 };
 
+function CountryMultiSelect({
+  selected,
+  options,
+  onChange,
+}: {
+  selected: string[];
+  options: string[];
+  onChange: (keys: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const listId = useId();
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  const label =
+    selected.length === 0
+      ? "Все страны"
+      : selected.length === 1
+        ? selected[0]
+        : selected.length <= 2
+          ? selected.join(", ")
+          : `${selected.length} стран`;
+
+  const toggle = (country: string) => {
+    if (selected.includes(country)) {
+      onChange(selected.filter((c) => c !== country));
+    } else {
+      onChange(
+        [...selected, country].sort((a, b) => a.localeCompare(b, "ru")),
+      );
+    }
+  };
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={listId}
+        onClick={() => setOpen((v) => !v)}
+        className="flex h-8 w-full items-center justify-between gap-1 rounded-md border border-zinc-200 bg-white px-2 text-left text-xs text-zinc-900 sm:h-9 sm:text-sm"
+      >
+        <span className="min-w-0 truncate">{label}</span>
+        <span className="shrink-0 text-zinc-400" aria-hidden>
+          ▾
+        </span>
+      </button>
+
+      {open ? (
+        <div
+          id={listId}
+          className="absolute left-0 right-0 z-30 mt-1 max-h-52 overflow-y-auto overscroll-contain rounded-md border border-zinc-200 bg-white py-1 shadow-lg"
+        >
+          {options.length === 0 ? (
+            <p className="px-2 py-2 text-xs text-zinc-500">Нет стран в коллекции</p>
+          ) : (
+            options.map((country) => {
+              const checked = selected.includes(country);
+              return (
+                <label
+                  key={country}
+                  className="flex cursor-pointer items-center gap-2 px-2 py-1.5 hover:bg-zinc-50"
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggle(country)}
+                    className="size-3.5 shrink-0 rounded border-zinc-300 text-rose-700 focus:ring-rose-200"
+                  />
+                  <span className="min-w-0 truncate text-xs sm:text-sm">{country}</span>
+                </label>
+              );
+            })
+          )}
+          {selected.length > 0 ? (
+            <div className="border-t border-zinc-100 px-2 py-1.5">
+              <button
+                type="button"
+                onClick={() => onChange([])}
+                className="text-xs font-medium text-rose-700 hover:underline"
+              >
+                Сбросить страны
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function WineFiltersBar({
   nameQuery,
   onNameQuery,
-  countryKey,
-  onCountryKey,
+  countryKeys,
+  onCountryKeys,
   countryOptions,
+  regionKey,
+  onRegionKey,
+  regionOptions,
   priceField,
   onPriceField,
   priceMin,
@@ -53,11 +158,14 @@ export function WineFiltersBar({
   }, [nameQuery]);
 
   useEffect(() => {
+    if (searchDraft === nameQuery) return;
     const id = window.setTimeout(() => {
       onNameQuery(searchDraft);
     }, SEARCH_DEBOUNCE_MS);
     return () => window.clearTimeout(id);
-  }, [searchDraft, onNameQuery]);
+  }, [searchDraft, nameQuery, onNameQuery]);
+
+  const regionDisabled = countryKeys.length !== 1;
 
   return (
     <div className="mb-5 space-y-3 rounded-lg border border-zinc-200 bg-white px-3 py-3 text-xs sm:px-4 sm:text-sm">
@@ -74,27 +182,45 @@ export function WineFiltersBar({
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-12 lg:items-end lg:gap-x-2 lg:gap-y-2">
         <label className="flex min-w-0 flex-col gap-1 lg:col-span-3">
-          <span className="text-[11px] font-medium text-zinc-600 sm:text-xs">Название</span>
+          <span className="text-[11px] font-medium text-zinc-600 sm:text-xs">
+            Название или производитель
+          </span>
           <input
             type="search"
             value={searchDraft}
             onChange={(e) => setSearchDraft(e.target.value)}
-            placeholder="Поиск…"
+            placeholder="Поиск по названию или производителю…"
             className="h-8 w-full min-w-0 rounded-md border border-zinc-200 bg-white px-2 text-xs text-zinc-900 sm:h-9 sm:text-sm"
           />
         </label>
 
-        <label className="flex min-w-0 flex-col gap-1 lg:col-span-2">
+        <div className="flex min-w-0 flex-col gap-1 lg:col-span-2">
           <span className="text-[11px] font-medium text-zinc-600 sm:text-xs">Страна</span>
+          <CountryMultiSelect
+            selected={countryKeys}
+            options={countryOptions}
+            onChange={onCountryKeys}
+          />
+        </div>
+
+        <label className="flex min-w-0 flex-col gap-1 lg:col-span-2">
+          <span className="text-[11px] font-medium text-zinc-600 sm:text-xs">Регион</span>
           <select
-            value={countryKey}
-            onChange={(e) => onCountryKey(e.target.value)}
-            className="h-8 w-full rounded-md border border-zinc-200 bg-white px-2 text-xs text-zinc-900 sm:h-9 sm:text-sm"
+            value={regionKey}
+            onChange={(e) => onRegionKey(e.target.value)}
+            disabled={regionDisabled}
+            className="h-8 w-full rounded-md border border-zinc-200 bg-white px-2 text-xs text-zinc-900 disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-400 sm:h-9 sm:text-sm"
           >
-            <option value="">Все</option>
-            {countryOptions.map((c) => (
-              <option key={c} value={c}>
-                {c}
+            <option value="">
+              {regionDisabled
+                ? countryKeys.length === 0
+                  ? "Сначала страна"
+                  : "Одна страна"
+                : "Все"}
+            </option>
+            {regionOptions.map((r) => (
+              <option key={r} value={r}>
+                {r}
               </option>
             ))}
           </select>
@@ -115,7 +241,7 @@ export function WineFiltersBar({
           </select>
         </label>
 
-        <label className="flex min-w-0 flex-col gap-1 lg:col-span-2">
+        <label className="flex min-w-0 flex-col gap-1 lg:col-span-1">
           <span className="text-[11px] font-medium text-zinc-600 sm:text-xs">Цена от</span>
           <input
             type="text"
@@ -127,7 +253,7 @@ export function WineFiltersBar({
           />
         </label>
 
-        <label className="flex min-w-0 flex-col gap-1 lg:col-span-2">
+        <label className="flex min-w-0 flex-col gap-1 lg:col-span-1">
           <span className="text-[11px] font-medium text-zinc-600 sm:text-xs">Цена до</span>
           <input
             type="text"

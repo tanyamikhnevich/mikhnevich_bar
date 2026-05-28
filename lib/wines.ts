@@ -32,6 +32,7 @@ export type WineSortKey =
   | "vivinoRating"
   | "name"
   | "year";
+export type { WineSortKey } from "./wineQuery";
 
 export type Wine = {
   id: string;
@@ -50,9 +51,7 @@ export type Wine = {
   originCurrency?: string | null;
   israelPrice?: number | null;
   israelCurrency?: string | null;
-  isGuestVisible?: boolean;
-  guestBottlePrice?: number | null;
-  guestGlassPrice?: number | null;
+  guestPrice?: number | null;
   purchaseDate?: string | null;
   vivinoRating?: number | null;
   quantity: number;
@@ -63,6 +62,7 @@ export type Wine = {
 
 export type NewWineInput = Omit<Wine, "id"> & { id?: string };
 
+export { formatWineYear, WINE_VINTAGE_NV } from "./wineVintage";
 function isWineColor(v: unknown): v is WineColor {
   return (
     v === "red" ||
@@ -223,8 +223,10 @@ export function formatDateRU(iso: string | null | undefined) {
   if (!iso) return "—";
   const [y, m, d] = iso.split("-").map((x) => Number(x));
   if (!y || !m || !d) return iso;
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  return new Intl.DateTimeFormat("ru-RU").format(dt);
+  const dd = String(d).padStart(2, "0");
+  const mm = String(m).padStart(2, "0");
+  const yy = String(y % 100).padStart(2, "0");
+  return `${dd}.${mm}.${yy}`;
 }
 
 export function displayNotes(notes: string | null | undefined) {

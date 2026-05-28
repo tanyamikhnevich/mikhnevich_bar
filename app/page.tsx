@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { AddWineModal } from "./ui/AddWineModal";
+import { DrinkWineModal } from "./ui/DrinkWineModal";
 import { WineFiltersBar } from "./ui/WineFiltersBar";
 import { SegmentedTabs } from "./ui/SegmentedTabs";
 import { WineTable } from "./ui/WineTable";
@@ -15,20 +17,25 @@ import {
 import type { Wine, WineColor, WineSortKey } from "../lib/wines";
 import {
   formatTableAmount,
-  groupWinesByColor,
-  sortWines,
-  useWines,
   WINE_COLOR_LABEL,
   WINE_COLOR_ORDER,
   WINE_SECTION_HEADER_CLASS,
 } from "../lib/wines";
-import type { WinePriceFilterField } from "../lib/wineFilters";
+import { useWineBrowseByColor } from "../lib/wineBrowse";
 import {
-  filterWinesByToolbar,
-  parseOptionalPositiveNumber,
-  sortedCountryFilterOptions,
-  WINE_TABLE_PAGE_SIZE,
-} from "../lib/wineFilters";
+  addWineApi,
+  deleteWineApi,
+  drinkWineApi,
+  restoreWineApi,
+  updateWineApi,
+} from "../lib/wineMutations";
+import { WINE_TABLE_PAGE_SIZE } from "../lib/wineFilters";
+import { homeUrlToBrowseFilters, useHomeWineListUrl } from "../lib/wineUrlState";
+
+function HomePageContent() {
+  const searchParams = useSearchParams();
+  const { state, replaceUrl, resetFilters } = useHomeWineListUrl();
+  const { tab, filters, sort, limits } = state;
 
 export default function Home() {
   const { wines, loading, error, addWine, updateWine, saveGuestMenu, totals } = useWines();
@@ -39,61 +46,127 @@ export default function Home() {
   const [guestSaving, setGuestSaving] = useState(false);
   const [tab, setTab] = useState<"collection" | "drank">("collection");
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [drinkTarget, setDrinkTarget] = useState<Wine | null>(null);
+
+  const browseFilters = useMemo(
+    () => homeUrlToBrowseFilters(searchParams),
+    [searchParams],
+  );
+
+  const { data, loading, error, refetch } = useWineBrowseByColor(browseFilters);
+
+  const totals = data?.totals ?? {
+    collection: 0,
+    drank: 0,
+    bottles: 0,
+    value: 0,
+  };
+  const countryOptions = data?.facets.countries ?? [];
+  const regionOptions = data?.facets.regions ?? [];
+
+  const effectiveCountryKeys =
+    data?.filters.countryKeys ?? filters.countryKeys;
+  const effectiveRegionKey = data?.filters.regionKey ?? filters.regionKey;
+
+  const setTab = useCallback(
+    (value: "collection" | "drank") => {
+      replaceUrl({ tab: value }, { clearLimits: true });
+    },
+    [replaceUrl],
+  );
+
+  const setNameQuery = useCallback(
+    (value: string) => {
+      replaceUrl({ nameQuery: value }, { clearLimits: true });
+    },
+    [replaceUrl],
+  );
+
+  const setCountryKeys = useCallback(
+    (value: string[]) => {
+      replaceUrl(
+        {
+          countryKeys: value,
+          ...(value.length === 1 ? {} : { regionKey: "" }),
+        },
+        { clearLimits: true },
+      );
+    },
+    [replaceUrl],
+  );
   const [sortBy, setSortBy] = useState<WineSortKey>("purchasePrice");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
-  const [nameQuery, setNameQuery] = useState("");
-  const [countryKey, setCountryKey] = useState("");
-  const [priceField, setPriceField] = useState<WinePriceFilterField>("purchase");
-  const [priceMinStr, setPriceMinStr] = useState("");
-  const [priceMaxStr, setPriceMaxStr] = useState("");
-  const [ratingMinStr, setRatingMinStr] = useState("");
-  const [limitByColor, setLimitByColor] = useState<Partial<Record<WineColor, number>>>(
-    {},
+  const setRegionKey = useCallback(
+    (value: string) => {
+      replaceUrl({ regionKey: value }, { clearLimits: true });
+    },
+    [replaceUrl],
   );
 
-  const tabWines = useMemo(
-    () => wines.filter((w) => (tab === "drank" ? w.drank : !w.drank)),
-    [tab, wines],
+  const setPriceField = useCallback(
+    (value: typeof filters.priceField) => {
+      replaceUrl({ priceField: value }, { clearLimits: true });
+    },
+    [replaceUrl],
   );
 
-  const countryOptions = useMemo(() => sortedCountryFilterOptions(tabWines), [tabWines]);
-
-  const countryFilter = useMemo(
-    () => (countryKey && countryOptions.includes(countryKey) ? countryKey : ""),
-    [countryKey, countryOptions],
+  const setPriceMinStr = useCallback(
+    (value: string) => {
+      replaceUrl({ priceMinStr: value }, { clearLimits: true });
+    },
+    [replaceUrl],
   );
 
-  const filterInput = useMemo(
-    () => ({
-      nameQuery,
-      countryKey: countryFilter,
-      priceField,
-      priceMin: parseOptionalPositiveNumber(priceMinStr),
-      priceMax: parseOptionalPositiveNumber(priceMaxStr),
-      ratingMin: parseOptionalPositiveNumber(ratingMinStr),
-    }),
-    [nameQuery, countryFilter, priceField, priceMinStr, priceMaxStr, ratingMinStr],
+  const setPriceMaxStr = useCallback(
+    (value: string) => {
+      replaceUrl({ priceMaxStr: value }, { clearLimits: true });
+    },
+    [replaceUrl],
   );
 
-  useEffect(() => {
-    queueMicrotask(() => setLimitByColor({}));
-  }, [tab, filterInput]);
-
-  const filteredList = useMemo(
-    () => filterWinesByToolbar(tabWines, filterInput),
-    [tabWines, filterInput],
+  const setRatingMinStr = useCallback(
+    (value: string) => {
+      replaceUrl({ ratingMinStr: value }, { clearLimits: true });
+    },
+    [replaceUrl],
   );
 
-  const filtered = useMemo(() => groupWinesByColor(filteredList), [filteredList]);
+  const setSortBy = useCallback(
+    (value: WineSortKey) => {
+      replaceUrl({ sortBy: value }, { clearLimits: true });
+    },
+    [replaceUrl],
+  );
 
-  const sortedFiltered = useMemo(() => {
-    const out = {} as Record<WineColor, Wine[]>;
-    for (const c of WINE_COLOR_ORDER) {
-      out[c] = sortWines(filtered[c], sortBy, sortDir);
-    }
-    return out;
-  }, [filtered, sortBy, sortDir]);
+  const setSortDir = useCallback(
+    (value: "asc" | "desc") => {
+      replaceUrl({ sortDir: value }, { clearLimits: true });
+    },
+    [replaceUrl],
+  );
+
+  const showMore = useCallback(
+    (color: WineColor) => {
+      const next =
+        (limits[color] ?? WINE_TABLE_PAGE_SIZE) + WINE_TABLE_PAGE_SIZE;
+      replaceUrl({ limits: { ...limits, [color]: next } });
+    },
+    [limits, replaceUrl],
+  );
+
+  const handleDrink = useCallback(
+    (wine: Wine) => {
+      if (wine.quantity <= 1) {
+        void drinkWineApi(wine.id, 1)
+          .then(() => refetch())
+          .catch((e) => alert(e instanceof Error ? e.message : String(e)));
+        return;
+      }
+      setDrinkTarget(wine);
+    },
+    [refetch],
+  );
 
   const enterGuestSelectMode = () => {
     setGuestDraft(buildGuestSelectionDraft(tabWines));
@@ -155,6 +228,34 @@ export default function Home() {
     setPriceMaxStr("");
     setRatingMinStr("");
   };
+  const handleRestore = useCallback(
+    (wine: Wine) => {
+      void restoreWineApi(wine.id)
+        .then(() => refetch())
+        .catch((e) => alert(e instanceof Error ? e.message : String(e)));
+    },
+    [refetch],
+  );
+
+  const handleUpdate = useCallback(
+    async (wine: Wine, patch: Record<string, unknown>) => {
+      await updateWineApi(wine.id, patch);
+      await refetch();
+    },
+    [refetch],
+  );
+
+  const handleDelete = useCallback(
+    async (wine: Wine) => {
+      await deleteWineApi(wine.id);
+      await refetch();
+    },
+    [refetch],
+  );
+
+  const hasAnySection =
+    data &&
+    WINE_COLOR_ORDER.some((c) => (data.sections[c]?.total ?? 0) > 0);
 
   return (
     <div className="min-h-full bg-zinc-50 text-zinc-900">
@@ -200,7 +301,7 @@ export default function Home() {
           </div>
         ) : null}
 
-        {loading ? (
+        {loading && !data ? (
           <div className="py-16 text-center text-sm text-zinc-500">Загрузка…</div>
         ) : (
           <>
@@ -268,18 +369,21 @@ export default function Home() {
             ) : null}
 
             <WineFiltersBar
-              nameQuery={nameQuery}
+              nameQuery={filters.nameQuery}
               onNameQuery={setNameQuery}
-              countryKey={countryFilter}
-              onCountryKey={setCountryKey}
+              countryKeys={effectiveCountryKeys}
+              onCountryKeys={setCountryKeys}
               countryOptions={countryOptions}
-              priceField={priceField}
+              regionKey={effectiveRegionKey}
+              onRegionKey={setRegionKey}
+              regionOptions={regionOptions}
+              priceField={filters.priceField}
               onPriceField={setPriceField}
-              priceMin={priceMinStr}
+              priceMin={filters.priceMinStr}
               onPriceMin={setPriceMinStr}
-              priceMax={priceMaxStr}
+              priceMax={filters.priceMaxStr}
               onPriceMax={setPriceMaxStr}
-              ratingMin={ratingMinStr}
+              ratingMin={filters.ratingMinStr}
               onRatingMin={setRatingMinStr}
               onReset={resetFilters}
             />
@@ -287,7 +391,7 @@ export default function Home() {
             <div className="mb-5 flex flex-wrap items-center gap-3 rounded-lg border border-zinc-200 bg-white px-4 py-3 text-sm">
               <span className="font-medium text-zinc-700">Сортировка:</span>
               <select
-                value={sortBy}
+                value={sort.sortBy}
                 onChange={(e) => setSortBy(e.target.value as WineSortKey)}
                 className="h-9 rounded-md border border-zinc-200 bg-white px-2 text-sm text-zinc-900"
               >
@@ -300,7 +404,7 @@ export default function Home() {
                 <option value="name">название</option>
               </select>
               <select
-                value={sortDir}
+                value={sort.sortDir}
                 onChange={(e) => setSortDir(e.target.value as "asc" | "desc")}
                 className="h-9 rounded-md border border-zinc-200 bg-white px-2 text-sm text-zinc-900"
               >
@@ -310,35 +414,45 @@ export default function Home() {
             </div>
 
             <div className="space-y-6">
-              {WINE_COLOR_ORDER.some((c) => sortedFiltered[c].length > 0) ? (
-                WINE_COLOR_ORDER.filter((color) => sortedFiltered[color].length > 0).map(
-                  (color) => {
-                    const full = sortedFiltered[color];
-                    const limit = limitByColor[color] ?? WINE_TABLE_PAGE_SIZE;
-                    const visible = full.slice(0, limit);
-                    const canShowMore = full.length > visible.length;
+              {hasAnySection ? (
+                WINE_COLOR_ORDER.filter(
+                  (color) => (data?.sections[color]?.total ?? 0) > 0,
+                ).map((color) => {
+                  const section = data!.sections[color];
+                  const visible = section.items;
+                  const total = section.total;
+                  const canShowMore = visible.length < total;
 
-                    return (
-                      <section
-                        key={color}
-                        className="overflow-hidden rounded-xl border border-zinc-200 bg-white"
+                  return (
+                    <section
+                      key={color}
+                      className="overflow-x-auto overflow-y-visible rounded-xl border border-zinc-200 bg-white"
+                    >
+                      <div
+                        className={`relative px-4 py-3 ${WINE_SECTION_HEADER_CLASS[color]}`}
                       >
-                        <div
-                          className={`flex flex-wrap items-center justify-between gap-2 px-4 py-3 ${WINE_SECTION_HEADER_CLASS[color]}`}
-                        >
-                          <h2 className="text-sm font-semibold">
-                            {WINE_COLOR_LABEL[color]}
-                          </h2>
-                          <div className="text-right text-xs opacity-80">
-                            <div>{full.length} позиций по фильтру</div>
-                            {visible.length < full.length ? (
-                              <div className="mt-0.5">
-                                показано {visible.length} из {full.length}
-                              </div>
-                            ) : null}
-                          </div>
+                        <h2 className="text-center text-sm font-semibold">
+                          {WINE_COLOR_LABEL[color]}
+                        </h2>
+                        <div className="absolute right-4 top-1/2 -translate-y-1/2 text-right text-xs opacity-80">
+                          <div>{total} позиций по фильтру</div>
+                          {visible.length < total ? (
+                            <div className="mt-0.5">
+                              показано {visible.length} из {total}
+                            </div>
+                          ) : null}
                         </div>
+                      </div>
 
+                      <WineTable
+                        wines={visible}
+                        showActions
+                        countryOptions={countryOptions}
+                        onDrink={tab === "collection" ? handleDrink : undefined}
+                        onRestore={tab === "drank" ? handleRestore : undefined}
+                        onUpdate={handleUpdate}
+                        onDelete={handleDelete}
+                      />
                         {guestSelectMode && tab === "collection" ? (
                           <WineTable
                             wines={visible}
@@ -361,28 +475,20 @@ export default function Home() {
                           />
                         )}
 
-                        {canShowMore ? (
-                          <div className="border-t border-zinc-100 px-4 py-3">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setLimitByColor((prev) => ({
-                                  ...prev,
-                                  [color]:
-                                    (prev[color] ?? WINE_TABLE_PAGE_SIZE) +
-                                    WINE_TABLE_PAGE_SIZE,
-                                }))
-                              }
-                              className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-100"
-                            >
-                              Показать ещё {WINE_TABLE_PAGE_SIZE}
-                            </button>
-                          </div>
-                        ) : null}
-                      </section>
-                    );
-                  },
-                )
+                      {canShowMore ? (
+                        <div className="border-t border-zinc-100 px-4 py-3">
+                          <button
+                            type="button"
+                            onClick={() => showMore(color)}
+                            className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-100"
+                          >
+                            Показать ещё {WINE_TABLE_PAGE_SIZE}
+                          </button>
+                        </div>
+                      ) : null}
+                    </section>
+                  );
+                })
               ) : (
                 <div className="rounded-xl border border-zinc-200 bg-white px-4 py-12 text-center text-sm text-zinc-500">
                   Нет вин в этом разделе или по заданным фильтрам
@@ -398,13 +504,38 @@ export default function Home() {
         onClose={() => setIsAddOpen(false)}
         onSubmit={async (wine) => {
           try {
-            await addWine({ ...wine, drank: false });
+            await addWineApi({ ...wine, drank: false });
             setIsAddOpen(false);
+            await refetch();
           } catch (e) {
             alert(e instanceof Error ? e.message : String(e));
           }
         }}
       />
+
+      <DrinkWineModal
+        wine={drinkTarget}
+        onClose={() => setDrinkTarget(null)}
+        onConfirm={async (quantity) => {
+          if (!drinkTarget) return;
+          await drinkWineApi(drinkTarget.id, quantity);
+          await refetch();
+        }}
+      />
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-full bg-zinc-50 py-16 text-center text-sm text-zinc-500">
+          Загрузка…
+        </div>
+      }
+    >
+      <HomePageContent />
+    </Suspense>
   );
 }
