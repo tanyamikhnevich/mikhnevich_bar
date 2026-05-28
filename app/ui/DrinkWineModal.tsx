@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { Wine } from "../../lib/wines";
+import type { Wine } from "@/lib/wines";
 
 function bottleLabel(n: number) {
   const mod10 = n % 10;
@@ -24,7 +24,7 @@ export function DrinkWineModal({
 
   return (
     <ModalShell onClose={onClose}>
-      <div className="flex items-start justify-between gap-4 border-b border-zinc-200 px-6 py-5">
+      <div className="flex items-start justify-between gap-4 border-b border-zinc-200 px-4 py-4 sm:px-6 sm:py-5">
         <div>
           <h2 className="text-lg font-semibold text-zinc-900">Отметить выпитым</h2>
           <p className="mt-1 text-sm text-zinc-600">
@@ -74,7 +74,7 @@ function DrinkWineForm({
 
   return (
     <form
-      className="px-6 py-5"
+      className="px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-5 sm:pb-5"
       onSubmit={(e) => {
         e.preventDefault();
         if (!valid || submitting) return;
@@ -107,18 +107,18 @@ function DrinkWineForm({
         <p className="mt-2 text-xs text-red-600">От 1 до {maxQty}</p>
       ) : null}
 
-      <div className="mt-6 flex flex-wrap justify-end gap-2">
+      <div className="mt-6 grid grid-cols-2 gap-2 sm:flex sm:justify-end">
         <button
           type="button"
           onClick={onClose}
-          className="rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+          className="min-h-11 rounded-xl border border-zinc-200 bg-white text-sm font-medium text-zinc-700 active:bg-zinc-50 sm:rounded-lg sm:px-4 sm:py-2"
         >
           Отмена
         </button>
         <button
           type="submit"
           disabled={!valid || submitting}
-          className="rounded-lg bg-rose-700 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-800 disabled:opacity-50"
+          className="min-h-11 rounded-xl bg-rose-700 text-sm font-semibold text-white active:bg-rose-800 disabled:opacity-50 sm:rounded-lg sm:px-4 sm:py-2"
         >
           {submitting ? "Сохранение…" : "Выпить"}
         </button>
@@ -136,14 +136,16 @@ function ModalShell({
 }) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-md rounded-2xl bg-white shadow-xl">{children}</div>
+      <div className="w-full max-w-md rounded-t-2xl bg-white shadow-xl sm:rounded-2xl">
+        {children}
+      </div>
     </div>
   );
 }

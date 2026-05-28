@@ -11,6 +11,7 @@ import {
   formatWineYear,
 } from "@/lib/wines";
 import { countryCodeToFlagEmoji } from "@/lib/wineUtils";
+import { WineMobileList } from "./WineMobileList";
 
 const cellBase = "min-w-0 break-words align-top text-center text-zinc-800";
 
@@ -92,18 +93,23 @@ export function GuestWineTable(props: WineTableProps) {
     colWidths = cols.map((w) => (showActions ? w : w * scale));
   }
 
-  const tableMinW =
-    variant === "guestSelect" ? "min-w-[70rem]" : variant === "guest" ? "min-w-[52rem]" : "min-w-[56rem]";
+  const mobileList =
+    variant === "guest" ? (
+      <WineMobileList variant="guest" wines={wines} />
+    ) : variant === "guestSelect" && guestSelect ? (
+      <WineMobileList
+        variant="guestSelect"
+        wines={wines}
+        guestSelection={guestSelect}
+      />
+    ) : null;
 
   return (
-    <div
-      className={[
-        "w-full min-w-0",
-        variant === "guestSelect" ? "overflow-x-auto" : "max-md:overflow-x-auto md:overflow-x-visible",
-      ].join(" ")}
-    >
+    <>
+      {mobileList}
+      <div className="hidden w-full min-w-0 md:block md:overflow-visible">
       <table
-        className={`w-full ${tableMinW} table-fixed border-collapse text-[11px] leading-snug sm:text-[12px]`}
+        className="w-full table-fixed border-collapse text-[11px] leading-snug sm:text-[12px]"
       >
         <colgroup>
           {colWidths.map((w, i) => (
@@ -334,5 +340,6 @@ export function GuestWineTable(props: WineTableProps) {
         </tbody>
       </table>
     </div>
+    </>
   );
 }

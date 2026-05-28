@@ -11,6 +11,7 @@ import {
 } from "@/lib/wines";
 import { countryCodeToFlagEmoji } from "@/lib/wineUtils";
 import { WineRowEditor } from "./WineRowEditor";
+import { WineMobileList } from "./WineMobileList";
 
 const ROW_H = "h-[4.5rem]";
 const ROW_MAX = "max-h-[4.5rem]";
@@ -257,8 +258,18 @@ export function WineTable({
   };
 
   return (
-    <div className="w-full min-w-0 max-md:overflow-x-auto md:overflow-visible">
-      <table className="w-full min-w-[58rem] table-fixed border-collapse select-text text-[11px] leading-snug sm:min-w-0 sm:text-[12px]">
+    <>
+      <WineMobileList
+        variant="collection"
+        wines={wines}
+        countryOptions={countryOptions}
+        onDrink={onDrink}
+        onRestore={onRestore}
+        onUpdate={onUpdate}
+        onDelete={onDelete}
+      />
+      <div className="hidden w-full min-w-0 md:block md:overflow-visible">
+      <table className="w-full table-fixed border-collapse select-text text-[11px] leading-snug sm:text-[12px]">
         <colgroup>
           {cols.map((w, i) => (
             <col
@@ -449,5 +460,6 @@ export function WineTable({
         </tbody>
       </table>
     </div>
+    </>
   );
 }

@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { AppHeader } from "../ui/AppHeader";
+import { SortBar } from "../ui/SortBar";
 import { WineFiltersBar } from "../ui/WineFiltersBar";
 import { GuestWineTable } from "../ui/GuestWineTable";
 import { useGuestWines } from "@/lib/wines";
@@ -106,29 +108,27 @@ export default function GuestPage() {
     setRatingMinStr("");
   };
 
+  const sortOptions: { value: WineSortKey; label: string }[] = [
+    { value: "guestBottlePrice", label: "цена за бутылку" },
+    { value: "guestGlassPrice", label: "цена за бокал" },
+    { value: "vivinoRating", label: "рейтинг Vivino" },
+    { value: "year", label: "год" },
+    { value: "name", label: "название" },
+  ];
+
   return (
     <div className="min-h-full bg-zinc-50 text-zinc-900">
-      <header className="w-full border-b border-zinc-200 bg-white">
-        <div className="mx-auto w-full max-w-[82rem] px-4 py-5 sm:px-6">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <span aria-hidden className="text-lg">
-                🥂
-              </span>
-              <h1 className="truncate text-xl font-semibold tracking-tight">
-                Гостевая карта
-              </h1>
-            </div>
-            <p className="mt-1 text-sm text-zinc-600">
-              {guestCount === 0
-                ? "Пока нет вин в гостевой карте"
-                : `${guestCount} позиций в гостевой карте`}
-            </p>
-          </div>
-        </div>
-      </header>
+      <AppHeader
+        emoji="🥂"
+        title="Гостевая карта"
+        subtitle={
+          guestCount === 0
+            ? "Пока нет вин в гостевой карте"
+            : `${guestCount} позиций для гостей`
+        }
+      />
 
-      <main className="mx-auto w-full max-w-[82rem] px-4 py-8 sm:px-6">
+      <main className="mx-auto w-full max-w-[82rem] px-3 py-4 sm:px-6 sm:py-8">
         {error ? (
           <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
             {error}
@@ -159,28 +159,13 @@ export default function GuestPage() {
               onReset={resetFilters}
             />
 
-            <div className="mb-5 flex flex-wrap items-center gap-3 rounded-lg border border-zinc-200 bg-white px-4 py-3 text-sm">
-              <span className="font-medium text-zinc-700">Сортировка:</span>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as WineSortKey)}
-                className="h-9 rounded-md border border-zinc-200 bg-white px-2 text-sm text-zinc-900"
-              >
-                <option value="guestBottlePrice">цена за бутылку</option>
-                <option value="guestGlassPrice">цена за бокал</option>
-                <option value="vivinoRating">рейтинг Vivino</option>
-                <option value="year">год</option>
-                <option value="name">название</option>
-              </select>
-              <select
-                value={sortDir}
-                onChange={(e) => setSortDir(e.target.value as "asc" | "desc")}
-                className="h-9 rounded-md border border-zinc-200 bg-white px-2 text-sm text-zinc-900"
-              >
-                <option value="desc">по убыванию</option>
-                <option value="asc">по возрастанию</option>
-              </select>
-            </div>
+            <SortBar
+              sortBy={sortBy}
+              sortDir={sortDir}
+              onSortBy={setSortBy}
+              onSortDir={setSortDir}
+              options={sortOptions}
+            />
 
             <div className="space-y-6">
               {WINE_COLOR_ORDER.some((c) => sortedFiltered[c].length > 0) ? (
@@ -194,7 +179,7 @@ export default function GuestPage() {
                     return (
                       <section
                         key={color}
-                        className="overflow-hidden rounded-xl border border-zinc-200 bg-white"
+                        className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm"
                       >
                         <div
                           className={`flex flex-wrap items-center justify-between gap-2 px-4 py-3 ${WINE_SECTION_HEADER_CLASS[color]}`}
@@ -202,11 +187,11 @@ export default function GuestPage() {
                           <h2 className="text-sm font-semibold">
                             {WINE_COLOR_LABEL[color]}
                           </h2>
-                          <div className="text-right text-xs opacity-80">
-                            <div>{full.length} позиций по фильтру</div>
+                          <div className="text-xs opacity-80">
+                            <div>{full.length} по фильтру</div>
                             {visible.length < full.length ? (
                               <div className="mt-0.5">
-                                показано {visible.length} из {full.length}
+                                {visible.length} из {full.length}
                               </div>
                             ) : null}
                           </div>
@@ -226,7 +211,7 @@ export default function GuestPage() {
                                     WINE_TABLE_PAGE_SIZE,
                                 }))
                               }
-                              className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-100"
+                              className="min-h-11 w-full rounded-xl border border-zinc-200 bg-zinc-50 text-sm font-medium text-zinc-800 active:bg-zinc-100 sm:rounded-lg sm:py-2"
                             >
                               Показать ещё {WINE_TABLE_PAGE_SIZE}
                             </button>

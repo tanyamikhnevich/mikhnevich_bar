@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import type { WinePriceFilterField } from "../../lib/wineFilters";
+import type { WinePriceFilterField } from "@/lib/wineQuery";
 
 const SEARCH_DEBOUNCE_MS = 320;
 
@@ -81,7 +81,7 @@ function CountryMultiSelect({
         aria-expanded={open}
         aria-controls={listId}
         onClick={() => setOpen((v) => !v)}
-        className="flex h-8 w-full items-center justify-between gap-1 rounded-md border border-zinc-200 bg-white px-2 text-left text-xs text-zinc-900 sm:h-9 sm:text-sm"
+        className="flex h-11 w-full items-center justify-between gap-1 rounded-lg border border-zinc-200 bg-white px-3 text-left text-base text-zinc-900 sm:h-9 sm:rounded-md sm:px-2 sm:text-sm"
       >
         <span className="min-w-0 truncate">{label}</span>
         <span className="shrink-0 text-zinc-400" aria-hidden>
@@ -167,33 +167,77 @@ export function WineFiltersBar({
 
   const regionDisabled = countryKeys.length !== 1;
 
+  const activeCount = [
+    nameQuery.trim(),
+    countryKeys.length > 0,
+    regionKey,
+    priceMin.trim(),
+    priceMax.trim(),
+    ratingMin.trim(),
+  ].filter(Boolean).length;
+
+  const [expanded, setExpanded] = useState(false);
+  const showPanel = expanded || activeCount > 0;
+
   return (
-    <div className="mb-5 space-y-3 rounded-lg border border-zinc-200 bg-white px-3 py-3 text-xs sm:px-4 sm:text-sm">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="font-medium text-zinc-800">Поиск и фильтры</span>
+    <div className="mb-4 rounded-xl border border-zinc-200 bg-white shadow-sm sm:mb-5">
+      <div className="flex items-center justify-between gap-2 px-3 py-3 sm:px-4">
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="flex min-h-10 min-w-0 flex-1 items-center gap-2 text-left sm:pointer-events-none"
+          aria-expanded={showPanel}
+        >
+          <span className="font-medium text-zinc-800 sm:text-sm">Фильтры</span>
+          {activeCount > 0 ? (
+            <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-800">
+              {activeCount}
+            </span>
+          ) : null}
+          <span className="ml-auto text-zinc-400 sm:hidden" aria-hidden>
+            {showPanel ? "▴" : "▾"}
+          </span>
+        </button>
         <button
           type="button"
           onClick={onReset}
-          className="text-xs font-medium text-rose-700 hover:underline sm:text-sm"
+          className="shrink-0 text-sm font-medium text-rose-700 active:text-rose-900 sm:text-sm"
         >
           Сбросить
         </button>
       </div>
 
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-12 lg:items-end lg:gap-x-2 lg:gap-y-2">
-        <label className="flex min-w-0 flex-col gap-1 lg:col-span-3">
-          <span className="text-[11px] font-medium text-zinc-600 sm:text-xs">
-            Название или производитель
-          </span>
-          <input
-            type="search"
-            value={searchDraft}
-            onChange={(e) => setSearchDraft(e.target.value)}
-            placeholder="Поиск по названию или производителю…"
-            className="h-8 w-full min-w-0 rounded-md border border-zinc-200 bg-white px-2 text-xs text-zinc-900 sm:h-9 sm:text-sm"
-          />
-        </label>
+      <label className="flex min-w-0 flex-col gap-1 border-t border-zinc-100 px-3 py-3 sm:hidden">
+        <span className="text-xs font-medium text-zinc-600">Поиск</span>
+        <input
+          type="search"
+          value={searchDraft}
+          onChange={(e) => setSearchDraft(e.target.value)}
+          placeholder="Название или производитель…"
+          className="h-11 w-full rounded-lg border border-zinc-200 bg-white px-3 text-base text-zinc-900"
+        />
+      </label>
 
+      <div
+        className={[
+          "space-y-3 border-t border-zinc-100 px-3 pb-3 text-xs sm:px-4 sm:pb-4 sm:text-sm",
+          showPanel ? "block" : "hidden sm:block",
+        ].join(" ")}
+      >
+      <label className="hidden min-w-0 flex-col gap-1 sm:flex lg:col-span-3">
+        <span className="text-[11px] font-medium text-zinc-600 sm:text-xs">
+          Название или производитель
+        </span>
+        <input
+          type="search"
+          value={searchDraft}
+          onChange={(e) => setSearchDraft(e.target.value)}
+          placeholder="Поиск по названию или производителю…"
+          className="h-8 w-full min-w-0 rounded-md border border-zinc-200 bg-white px-2 text-xs text-zinc-900 sm:h-9 sm:text-sm"
+        />
+      </label>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-12 lg:items-end lg:gap-x-2 lg:gap-y-2">
         <div className="flex min-w-0 flex-col gap-1 lg:col-span-2">
           <span className="text-[11px] font-medium text-zinc-600 sm:text-xs">Страна</span>
           <CountryMultiSelect
@@ -209,7 +253,7 @@ export function WineFiltersBar({
             value={regionKey}
             onChange={(e) => onRegionKey(e.target.value)}
             disabled={regionDisabled}
-            className="h-8 w-full rounded-md border border-zinc-200 bg-white px-2 text-xs text-zinc-900 disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-400 sm:h-9 sm:text-sm"
+            className="h-11 w-full rounded-lg border border-zinc-200 bg-white px-3 text-base text-zinc-900 disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-400 sm:h-9 sm:rounded-md sm:px-2 sm:text-sm"
           >
             <option value="">
               {regionDisabled
@@ -231,7 +275,7 @@ export function WineFiltersBar({
           <select
             value={priceField}
             onChange={(e) => onPriceField(e.target.value as WinePriceFilterField)}
-            className="h-8 w-full rounded-md border border-zinc-200 bg-white px-2 text-xs text-zinc-900 sm:h-9 sm:text-sm"
+            className="h-11 w-full rounded-lg border border-zinc-200 bg-white px-3 text-base text-zinc-900 sm:h-9 sm:rounded-md sm:px-2 sm:text-sm"
           >
             {(Object.keys(PRICE_LABEL) as WinePriceFilterField[]).map((k) => (
               <option key={k} value={k}>
@@ -249,7 +293,7 @@ export function WineFiltersBar({
             value={priceMin}
             onChange={(e) => onPriceMin(e.target.value)}
             placeholder="—"
-            className="h-8 w-full rounded-md border border-zinc-200 bg-white px-2 text-xs text-zinc-900 sm:h-9 sm:text-sm"
+            className="h-11 w-full rounded-lg border border-zinc-200 bg-white px-3 text-base text-zinc-900 sm:h-9 sm:rounded-md sm:px-2 sm:text-sm"
           />
         </label>
 
@@ -261,7 +305,7 @@ export function WineFiltersBar({
             value={priceMax}
             onChange={(e) => onPriceMax(e.target.value)}
             placeholder="—"
-            className="h-8 w-full rounded-md border border-zinc-200 bg-white px-2 text-xs text-zinc-900 sm:h-9 sm:text-sm"
+            className="h-11 w-full rounded-lg border border-zinc-200 bg-white px-3 text-base text-zinc-900 sm:h-9 sm:rounded-md sm:px-2 sm:text-sm"
           />
         </label>
 
@@ -273,9 +317,10 @@ export function WineFiltersBar({
             value={ratingMin}
             onChange={(e) => onRatingMin(e.target.value)}
             placeholder="—"
-            className="h-8 w-full rounded-md border border-zinc-200 bg-white px-2 text-xs text-zinc-900 sm:h-9 sm:text-sm"
+            className="h-11 w-full rounded-lg border border-zinc-200 bg-white px-3 text-base text-zinc-900 sm:h-9 sm:rounded-md sm:px-2 sm:text-sm"
           />
         </label>
+      </div>
       </div>
     </div>
   );
