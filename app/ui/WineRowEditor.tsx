@@ -19,6 +19,16 @@ import {
   wineToFormState,
   type WineFormState,
 } from "../../lib/wineFormShared";
+import {
+  drankDisplayFromExcel,
+  type DrankExcelMetaEntry,
+} from "../../lib/myWinesXlsxDrankMeta";
+import drankExcelMetaFile from "../../data/drank-excel-meta.json";
+
+const EXCEL_META_BY_ROW = drankExcelMetaFile.byRow as Record<
+  string,
+  DrankExcelMetaEntry
+>;
 
 const inputClass =
   "h-8 w-full rounded border border-zinc-200 bg-white px-2 text-[11px] text-zinc-900 outline-none focus:border-rose-300 focus:ring-2 focus:ring-rose-100";
@@ -49,12 +59,14 @@ export function WineRowEditor({
   onSave,
   onCancel,
   saving = false,
+  variant = "collection",
 }: {
   wine: Wine;
   countryOptions: string[];
   onSave: (patch: Record<string, unknown>) => Promise<void>;
   onCancel: () => void;
   saving?: boolean;
+  variant?: "collection" | "drank";
 }) {
   const canonicalCountries = useMemo(() => getCanonicalCountries(), []);
 
@@ -67,9 +79,19 @@ export function WineRowEditor({
     return [...names].sort((a, b) => a.localeCompare(b, "ru"));
   }, [canonicalCountries, countryOptionsProp, wine.country]);
 
-  const [form, setForm] = useState<WineFormState>(() =>
-    wineToFormState(wine, countryOptions, []),
-  );
+  const [form, setForm] = useState<WineFormState>(() => {
+    const base = wineToFormState(wine, countryOptions, []);
+    if (variant !== "drank") return base;
+    const display = drankDisplayFromExcel(wine, EXCEL_META_BY_ROW);
+    return {
+      ...base,
+      drankAt: base.drankAt || "",
+      drankRating:
+        base.drankRating ||
+        (display.rating != null ? String(display.rating) : ""),
+      drankNotes: base.drankNotes || display.notes || "",
+    };
+  });
   const [regionOptions, setRegionOptions] = useState<string[]>([]);
   const [regionsLoading, setRegionsLoading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -139,7 +161,11 @@ export function WineRowEditor({
           setSubmitError(err);
           return;
         }
-        void onSave(formStateToUpdateBody(form)).catch((ex) => {
+        void onSave(
+          formStateToUpdateBody(form, {
+            includeDrankMeta: variant === "drank",
+          }),
+        ).catch((ex) => {
           setSubmitError(ex instanceof Error ? ex.message : String(ex));
         });
       }}
@@ -357,7 +383,7 @@ export function WineRowEditor({
             />
           ) : null}
         </Field>
-        <Field label="Дата *">
+        <Field label="Дата покупки *">
           <input
             type="date"
             className={inputClass}
@@ -365,7 +391,35 @@ export function WineRowEditor({
             onChange={(e) => patch({ purchaseDate: e.target.value })}
           />
         </Field>
-        <Field label="Заметка" className="sm:col-span-2">
+        {variant === "drank" ? (
+          <>
+            <Field label="Когда выпили">
+              <input
+                type="date"
+                className={inputClass}
+                value={form.drankAt}
+                onChange={(e) => patch({ drankAt: e.target.value })}
+              />
+            </Field>
+            <Field label="Моя оценка">
+              <input
+                className={inputClass}
+                inputMode="decimal"
+                value={form.drankRating}
+                onChange={(e) => patch({ drankRating: e.target.value })}
+                placeholder="0–10"
+              />
+            </Field>
+            <Field label="Заметки о вине" className="sm:col-span-2">
+              <input
+                className={inputClass}
+                value={form.drankNotes}
+                onChange={(e) => patch({ drankNotes: e.target.value })}
+              />
+            </Field>
+          </>
+        ) : null}
+        <Field label="Служебная заметка" className="sm:col-span-2">
           <input
             className={inputClass}
             value={form.notes}

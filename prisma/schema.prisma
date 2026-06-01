@@ -47,10 +47,14 @@ model Wine {
   quantity Int      @default(1)
   color    WineColor
   drank    Boolean  @default(false)
+  drankAt      DateTime?
+  drankRating  Float?
+  drankNotes   String?
   notes    String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([drank, color, createdAt])
+  @@index([drank, drankAt])
 }

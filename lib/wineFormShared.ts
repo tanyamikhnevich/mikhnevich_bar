@@ -1,4 +1,5 @@
 import type { Wine, WineColor } from "./wines";
+import { parseDrankRating } from "./wineDrankRating";
 import {
   formatWineYear,
   parseVintageFromFormInput,
@@ -38,6 +39,9 @@ export type WineFormState = {
   quantity: string;
   color: WineColor;
   notes: string;
+  drankAt: string;
+  drankRating: string;
+  drankNotes: string;
 };
 
 export function parseVvScoreFromRatings(ratings: string | null | undefined): string {
@@ -122,6 +126,12 @@ export function wineToFormState(
     quantity: String(wine.quantity > 0 ? wine.quantity : 1),
     color: wine.color,
     notes: wine.notes ?? "",
+    drankAt: wine.drankAt?.slice(0, 10) ?? "",
+    drankRating:
+      wine.drankRating != null && Number.isFinite(wine.drankRating)
+        ? String(wine.drankRating)
+        : "",
+    drankNotes: wine.drankNotes?.trim() ?? "",
   };
 }
 
@@ -201,13 +211,16 @@ export function validateWineForm(
   return null;
 }
 
-export function formStateToUpdateBody(form: WineFormState) {
+export function formStateToUpdateBody(
+  form: WineFormState,
+  options?: { includeDrankMeta?: boolean },
+) {
   const { country, region, isCountryOther } = resolveFormGeo(form);
   const israelPrice = form.israelPrice.trim()
     ? parsePositivePrice(form.israelPrice)
     : null;
 
-  return {
+  const body: Record<string, unknown> = {
     name: form.name.trim(),
     producer: form.producer.trim(),
     year: parseVintageFromFormInput(form.year),
@@ -236,4 +249,13 @@ export function formStateToUpdateBody(form: WineFormState) {
     color: form.color,
     notes: form.notes.trim() || null,
   };
+
+  if (options?.includeDrankMeta) {
+    body.drankAt = form.drankAt.trim() || null;
+    const ratingRaw = form.drankRating.trim();
+    body.drankRating = ratingRaw ? parseDrankRating(ratingRaw) : null;
+    body.drankNotes = form.drankNotes.trim() || null;
+  }
+
+  return body;
 }

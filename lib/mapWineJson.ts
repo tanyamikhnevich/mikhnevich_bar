@@ -23,6 +23,9 @@ export function toWineJson(w: {
   quantity: number;
   color: string;
   drank: boolean;
+  drankAt: Date | null;
+  drankRating: number | null;
+  drankNotes: string | null;
   notes: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -52,6 +55,9 @@ export function toWineJson(w: {
     quantity: w.quantity,
     color: w.color,
     drank: w.drank,
+    drankAt: w.drankAt ? w.drankAt.toISOString() : null,
+    drankRating: w.drankRating,
+    drankNotes: w.drankNotes,
     notes: w.notes,
     createdAt: w.createdAt.toISOString(),
     updatedAt: w.updatedAt.toISOString(),

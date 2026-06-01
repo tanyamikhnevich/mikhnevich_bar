@@ -1,7 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import type { GuestSelectionDraft } from "@/lib/guestSelection";
+import {
+  autoGlassPriceFromBottle,
+  type GuestSelectionDraft,
+} from "@/lib/guestSelection";
 import type { Wine } from "@/lib/wines";
 import {
   displayNotes,
@@ -12,7 +15,18 @@ import {
   formatWineYear,
 } from "@/lib/wines";
 import { countryCodeToFlagEmoji } from "@/lib/wineUtils";
+import { formatDrankRating } from "@/lib/wineDrankRating";
+import {
+  drankDisplayFromExcel,
+  type DrankExcelMetaEntry,
+} from "@/lib/myWinesXlsxDrankMeta";
+import drankExcelMetaFile from "@/data/drank-excel-meta.json";
 import { WineRowEditor } from "./WineRowEditor";
+
+const EXCEL_META_BY_ROW = drankExcelMetaFile.byRow as Record<
+  string,
+  DrankExcelMetaEntry
+>;
 
 function MetaLine({ parts }: { parts: (string | null | undefined)[] }) {
   const line = parts.filter((p) => p && String(p).trim() && p !== "—").join(" · ");
@@ -32,7 +46,7 @@ function PriceChip({ label, value }: { label: string; value: string }) {
 }
 
 type CollectionProps = {
-  variant: "collection";
+  variant: "collection" | "drank";
   wines: Wine[];
   countryOptions?: string[];
   onDrink?: (wine: Wine) => void;
@@ -192,6 +206,9 @@ export function WineMobileList(props: WineMobileListProps) {
                       <span className="mb-1 block text-xs font-medium text-zinc-600">
                         Цена бок.
                       </span>
+                      <span className="mb-1 block text-[10px] leading-snug text-zinc-500">
+                        Пусто — не по бокалам. Иначе авто: ÷5+4
+                      </span>
                       <input
                         type="text"
                         inputMode="decimal"
@@ -200,9 +217,22 @@ export function WineMobileList(props: WineMobileListProps) {
                           onDraftChange(w.id, { glassPrice: e.target.value })
                         }
                         disabled={!(row?.selected ?? false)}
-                        placeholder="—"
+                        placeholder={row?.glassPriceManual ? "—" : "авто"}
                         className="h-11 w-full rounded-lg border border-zinc-200 bg-white px-3 text-base text-zinc-900"
                       />
+                      {row?.glassPriceManual &&
+                      row?.bottlePrice &&
+                      (row?.selected ?? false) ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onDraftChange(w.id, autoGlassPriceFromBottle(row.bottlePrice))
+                          }
+                          className="mt-1 text-xs font-medium text-rose-700 hover:underline"
+                        >
+                          Подставить по формуле
+                        </button>
+                      ) : null}
                     </label>
                   </div>
                 </>
@@ -221,6 +251,10 @@ export function WineMobileList(props: WineMobileListProps) {
         const isEditing = editingId === w.id;
         const isBusy = savingId === w.id || deletingId === w.id;
         const hasActions = Boolean(onDrink || onRestore || onUpdate || onDelete);
+        const drankDisplay =
+          variant === "drank"
+            ? drankDisplayFromExcel(w, EXCEL_META_BY_ROW)
+            : null;
 
         return (
           <li key={w.id} className="px-4 py-4">
@@ -229,9 +263,11 @@ export function WineMobileList(props: WineMobileListProps) {
                 <p className="font-semibold leading-snug text-zinc-900">{w.name || "—"}</p>
                 <p className="mt-0.5 text-sm text-zinc-600">{w.producer || "—"}</p>
               </div>
-              <span className="shrink-0 rounded-full bg-zinc-100 px-2.5 py-1 text-sm font-semibold text-zinc-800">
-                {w.quantity} шт.
-              </span>
+              {variant === "collection" ? (
+                <span className="shrink-0 rounded-full bg-zinc-100 px-2.5 py-1 text-sm font-semibold text-zinc-800">
+                  {w.quantity} шт.
+                </span>
+              ) : null}
             </div>
 
             <MetaLine
@@ -246,9 +282,24 @@ export function WineMobileList(props: WineMobileListProps) {
             {ratings ? (
               <p className="mt-1 text-sm text-zinc-600">Рейтинг: {ratings}</p>
             ) : null}
-            {extra ? <p className="mt-1 text-xs text-zinc-500">{extra}</p> : null}
+            {variant === "drank" && drankDisplay?.rating != null ? (
+              <p className="mt-1 text-sm text-zinc-600">
+                Моя оценка: {formatDrankRating(drankDisplay.rating)}
+              </p>
+            ) : null}
+            {variant === "drank" && drankDisplay?.notes ? (
+              <p className="mt-1 text-xs text-zinc-500">{drankDisplay.notes}</p>
+            ) : null}
+            {extra && variant === "collection" ? (
+              <p className="mt-1 text-xs text-zinc-500">{extra}</p>
+            ) : null}
             <p className="mt-1 text-xs text-zinc-500">
-              Покупка: {formatDateRU(w.purchaseDate)}
+              {variant === "drank" ? "Когда выпили" : "Покупка"}:{" "}
+              {variant === "drank"
+                ? w.drankAt
+                  ? formatDateRU(w.drankAt.slice(0, 10))
+                  : "—"
+                : formatDateRU(w.purchaseDate)}
             </p>
 
             <div className="mt-3 grid grid-cols-3 gap-2">
@@ -268,13 +319,13 @@ export function WineMobileList(props: WineMobileListProps) {
 
             {hasActions && !isEditing ? (
               <div className="mt-3 flex flex-wrap gap-2">
-                {w.drank
+                {variant === "drank" || w.drank
                   ? onRestore && (
                       <button
                         type="button"
                         onClick={() => void onRestore(w)}
                         disabled={isBusy}
-                        className="min-h-11 flex-1 rounded-lg border border-rose-200 bg-rose-50 px-3 text-sm font-semibold text-rose-800 active:bg-rose-100 disabled:opacity-50"
+                        className="min-h-11 flex-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-800 active:bg-emerald-100 disabled:opacity-50"
                       >
                         Вернуть
                       </button>
@@ -295,8 +346,9 @@ export function WineMobileList(props: WineMobileListProps) {
                     onClick={() => setEditingId(w.id)}
                     disabled={isBusy}
                     className="min-h-11 rounded-lg border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 active:bg-zinc-50 disabled:opacity-50"
+                    aria-label="Редактировать"
                   >
-                    Изменить
+                    {variant === "drank" ? "Изменить" : "Изменить"}
                   </button>
                 ) : null}
                 {onDelete ? (
@@ -316,6 +368,7 @@ export function WineMobileList(props: WineMobileListProps) {
               <div className="mt-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
                 <WineRowEditor
                   wine={w}
+                  variant={variant}
                   countryOptions={countryOptions}
                   saving={savingId === w.id}
                   onCancel={() => setEditingId(null)}

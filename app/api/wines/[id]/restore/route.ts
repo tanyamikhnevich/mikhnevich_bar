@@ -43,7 +43,12 @@ export async function POST(
 
     const restored = await prisma.wine.update({
       where: { id },
-      data: { drank: false },
+      data: {
+        drank: false,
+        drankAt: null,
+        drankRating: null,
+        drankNotes: null,
+      },
     });
     return NextResponse.json({
       active: toWineJson(restored),

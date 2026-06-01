@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useCallback, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AddWineModal } from "./ui/AddWineModal";
 import { DrinkWineModal } from "./ui/DrinkWineModal";
 import { AppHeader } from "./ui/AppHeader";
-import { GuestSelectBar } from "./ui/GuestSelectBar";
+import { GuestSelectFooter } from "./ui/GuestSelectFooter";
+import { LoadingSpinner, TableLoadingPanel } from "./ui/LoadingSpinner";
 import { SortBar } from "./ui/SortBar";
 import { WineFiltersBar } from "./ui/WineFiltersBar";
 import { SegmentedTabs } from "./ui/SegmentedTabs";
@@ -16,8 +17,13 @@ import type { GuestSelectionDraft } from "@/lib/guestSelection";
 import {
   buildGuestSelectionDraft,
   guestDraftToUpdates,
+  patchGuestDraftRow,
   validateGuestSelectionDraft,
 } from "@/lib/guestSelection";
+import {
+  defaultSortForContext,
+  sortOptionsFor,
+} from "@/lib/wineListUi";
 import type { Wine, WineColor, WineSortKey } from "@/lib/wines";
 import {
   formatTableAmount,
@@ -43,10 +49,26 @@ import { homeUrlToBrowseFilters, useHomeWineListUrl } from "@/lib/wineUrlState";
 
 function HomePageContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
   const { state, replaceUrl, resetFilters } = useHomeWineListUrl();
-  const { tab, filters, sort, limits } = state;
+  const { tab, filters, sort } = state;
+  const [colorLimits, setColorLimits] = useState<
+    Partial<Record<WineColor, number>>
+  >({});
 
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [addWineCopyFrom, setAddWineCopyFrom] = useState<Wine | null>(null);
+
+  const openAddWine = useCallback((copyFrom?: Wine) => {
+    setAddWineCopyFrom(copyFrom ?? null);
+    setIsAddOpen(true);
+  }, []);
+
+  const closeAddWine = useCallback(() => {
+    setIsAddOpen(false);
+    setAddWineCopyFrom(null);
+  }, []);
   const [drinkTarget, setDrinkTarget] = useState<Wine | null>(null);
   const [guestSelectMode, setGuestSelectMode] = useState(false);
   const [guestDraft, setGuestDraft] = useState<GuestSelectionDraft>({});
@@ -59,11 +81,40 @@ function HomePageContent() {
   const [guestLoading, setGuestLoading] = useState(false);
 
   const browseFilters = useMemo(
-    () => homeUrlToBrowseFilters(searchParams),
-    [searchParams],
+    () => ({
+      ...homeUrlToBrowseFilters(searchParams),
+      limits: colorLimits,
+    }),
+    [searchParams, colorLimits],
   );
 
-  const { data, loading, error, refetch } = useWineBrowseByColor(browseFilters);
+  const patchUrl = useCallback(
+    (
+      patch: Parameters<typeof replaceUrl>[0],
+      options?: Parameters<typeof replaceUrl>[1],
+    ) => {
+      if (options?.clearLimits) setColorLimits({});
+      replaceUrl(patch, options);
+    },
+    [replaceUrl],
+  );
+
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    let stripped = false;
+    for (const color of WINE_COLOR_ORDER) {
+      if (params.has(`${color}Limit`)) {
+        params.delete(`${color}Limit`);
+        stripped = true;
+      }
+    }
+    if (!stripped) return;
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [pathname, router, searchParams]);
+
+  const { data, loading, isRefreshing, loadingMoreColor, error, refetch } =
+    useWineBrowseByColor(browseFilters);
 
   const totals = data?.totals ?? {
     collection: 0,
@@ -87,9 +138,9 @@ function HomePageContent() {
         setGuestValidationIds(new Set());
         setGuestFormError(null);
       }
-      replaceUrl({ tab: value }, { clearLimits: true });
+      patchUrl({ tab: value }, { clearLimits: true });
     },
-    [guestSelectMode, replaceUrl],
+    [guestSelectMode, patchUrl],
   );
 
   const enterGuestSelectMode = useCallback(() => {
@@ -118,10 +169,14 @@ function HomePageContent() {
 
   const patchGuestDraft = useCallback(
     (id: string, patch: Partial<GuestSelectionDraft[string]>) => {
-      setGuestDraft((prev) => ({
-        ...prev,
-        [id]: { ...prev[id], ...patch },
-      }));
+      setGuestDraft((prev) => {
+        const current = prev[id];
+        if (!current) return prev;
+        return {
+          ...prev,
+          [id]: patchGuestDraftRow(current, patch),
+        };
+      });
       setGuestValidationIds((prev) => {
         if (!prev.has(id)) return prev;
         const next = new Set(prev);
@@ -157,14 +212,14 @@ function HomePageContent() {
 
   const setNameQuery = useCallback(
     (value: string) => {
-      replaceUrl({ nameQuery: value }, { clearLimits: true });
+      patchUrl({ nameQuery: value }, { clearLimits: true });
     },
-    [replaceUrl],
+    [patchUrl],
   );
 
   const setCountryKeys = useCallback(
     (value: string[]) => {
-      replaceUrl(
+      patchUrl(
         {
           countryKeys: value,
           ...(value.length === 1 ? {} : { regionKey: "" }),
@@ -172,79 +227,77 @@ function HomePageContent() {
         { clearLimits: true },
       );
     },
-    [replaceUrl],
+    [patchUrl],
   );
 
   const setRegionKey = useCallback(
     (value: string) => {
-      replaceUrl({ regionKey: value }, { clearLimits: true });
+      patchUrl({ regionKey: value }, { clearLimits: true });
     },
-    [replaceUrl],
+    [patchUrl],
   );
 
   const setPriceField = useCallback(
     (value: WinePriceFilterField) => {
-      replaceUrl({ priceField: value }, { clearLimits: true });
+      patchUrl({ priceField: value }, { clearLimits: true });
     },
-    [replaceUrl],
+    [patchUrl],
   );
 
   const setPriceMinStr = useCallback(
     (value: string) => {
-      replaceUrl({ priceMinStr: value }, { clearLimits: true });
+      patchUrl({ priceMinStr: value }, { clearLimits: true });
     },
-    [replaceUrl],
+    [patchUrl],
   );
 
   const setPriceMaxStr = useCallback(
     (value: string) => {
-      replaceUrl({ priceMaxStr: value }, { clearLimits: true });
+      patchUrl({ priceMaxStr: value }, { clearLimits: true });
     },
-    [replaceUrl],
+    [patchUrl],
   );
 
   const setRatingMinStr = useCallback(
     (value: string) => {
-      replaceUrl({ ratingMinStr: value }, { clearLimits: true });
+      patchUrl({ ratingMinStr: value }, { clearLimits: true });
     },
-    [replaceUrl],
+    [patchUrl],
   );
 
   const setSortBy = useCallback(
     (value: WineSortKey) => {
-      replaceUrl({ sortBy: value }, { clearLimits: true });
+      patchUrl({ sortBy: value }, { clearLimits: true });
     },
-    [replaceUrl],
+    [patchUrl],
   );
 
   const setSortDir = useCallback(
     (value: "asc" | "desc") => {
-      replaceUrl({ sortDir: value }, { clearLimits: true });
+      patchUrl({ sortDir: value }, { clearLimits: true });
     },
-    [replaceUrl],
+    [patchUrl],
   );
 
   const showMore = useCallback(
     (color: WineColor) => {
-      const next =
-        (limits[color] ?? WINE_TABLE_PAGE_SIZE) + WINE_TABLE_PAGE_SIZE;
-      replaceUrl({ limits: { ...limits, [color]: next } });
+      if (loadingMoreColor) return;
+      setColorLimits((prev) => ({
+        ...prev,
+        [color]: (prev[color] ?? WINE_TABLE_PAGE_SIZE) + WINE_TABLE_PAGE_SIZE,
+      }));
     },
-    [limits, replaceUrl],
+    [loadingMoreColor],
   );
 
-  const handleDrink = useCallback(
-    (wine: Wine) => {
-      if (wine.quantity <= 1) {
-        void drinkWineApi(wine.id, 1)
-          .then(() => refetch())
-          .catch((e) => alert(e instanceof Error ? e.message : String(e)));
-        return;
-      }
-      setDrinkTarget(wine);
-    },
-    [refetch],
-  );
+  const handleResetFilters = useCallback(() => {
+    setColorLimits({});
+    resetFilters();
+  }, [resetFilters]);
+
+  const handleDrink = useCallback((wine: Wine) => {
+    setDrinkTarget(wine);
+  }, []);
 
   const handleRestore = useCallback(
     (wine: Wine) => {
@@ -275,15 +328,7 @@ function HomePageContent() {
     data &&
     WINE_COLOR_ORDER.some((c) => (data.sections[c]?.total ?? 0) > 0);
 
-  const sortOptions: { value: WineSortKey; label: string }[] = [
-    { value: "purchaseDate", label: "дата покупки" },
-    { value: "purchasePrice", label: "цена покупки" },
-    { value: "israelPrice", label: "цена в Израиле" },
-    { value: "originPrice", label: "цена (оригинал)" },
-    { value: "vivinoRating", label: "рейтинг Vivino" },
-    { value: "year", label: "год" },
-    { value: "name", label: "название" },
-  ];
+  const sortOptions = sortOptionsFor(tab);
 
   return (
     <div className="min-h-full bg-zinc-50 text-zinc-900">
@@ -299,14 +344,33 @@ function HomePageContent() {
           <>
             <Link
               href="/guest"
-              className="inline-flex min-h-11 items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 active:bg-zinc-50 sm:rounded-lg sm:px-3 sm:py-2"
+              className="inline-flex min-h-11 items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 active:bg-zinc-50 sm:min-h-9 sm:rounded-lg sm:px-3 sm:py-2"
             >
               Гости
             </Link>
+            {tab === "collection" && guestSelectMode ? (
+              <button
+                type="button"
+                onClick={exitGuestSelectMode}
+                disabled={guestSaving}
+                className="inline-flex min-h-11 items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 active:bg-zinc-50 disabled:opacity-60 sm:min-h-9 sm:rounded-lg sm:px-3 sm:py-2"
+              >
+                Отменить
+              </button>
+            ) : tab === "collection" ? (
+              <button
+                type="button"
+                onClick={enterGuestSelectMode}
+                disabled={guestLoading}
+                className="inline-flex min-h-11 items-center justify-center rounded-xl border border-rose-200 bg-rose-50 px-3 text-sm font-medium text-rose-800 active:bg-rose-100 disabled:opacity-60 sm:min-h-9 sm:rounded-lg sm:py-2"
+              >
+                {guestLoading ? "Загрузка…" : "Выбрать вина для гостей"}
+              </button>
+            ) : null}
             <button
               type="button"
-              onClick={() => setIsAddOpen(true)}
-              className="inline-flex min-h-11 items-center justify-center rounded-xl bg-rose-700 px-4 text-sm font-semibold text-white active:bg-rose-800 sm:rounded-lg sm:px-4 sm:py-2"
+              onClick={() => openAddWine()}
+              className="inline-flex min-h-11 items-center justify-center rounded-xl bg-rose-700 px-4 text-sm font-semibold text-white active:bg-rose-800 sm:min-h-9 sm:rounded-lg sm:px-4 sm:py-2"
             >
               + Добавить
             </button>
@@ -314,12 +378,7 @@ function HomePageContent() {
         }
       />
 
-      <main
-        className={[
-          "mx-auto w-full max-w-[82rem] px-3 py-4 sm:px-6 sm:py-8",
-          guestSelectMode ? "pb-28 md:pb-8" : "",
-        ].join(" ")}
-      >
+      <main className="mx-auto w-full max-w-[82rem] px-3 py-4 sm:px-6 sm:py-8">
         {error ? (
           <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
             {error}
@@ -327,70 +386,56 @@ function HomePageContent() {
         ) : null}
 
         {loading && !data ? (
-          <div className="py-16 text-center text-sm text-zinc-500">Загрузка…</div>
+          <TableLoadingPanel />
         ) : (
           <>
             <div className="mb-4 flex flex-col gap-3 sm:mb-5">
               <SegmentedTabs
                 value={tab}
                 onChange={setTab}
+                disabled={isRefreshing}
                 options={[
                   { value: "collection", label: `Коллекция (${totals.collection})` },
                   { value: "drank", label: `Выпито (${totals.drank})` },
                 ]}
               />
 
-              {tab === "collection" && !guestSelectMode ? (
-                <button
-                  type="button"
-                  onClick={enterGuestSelectMode}
-                  disabled={guestLoading}
-                  className="min-h-11 w-full rounded-xl border border-rose-200 bg-rose-50 px-4 text-sm font-medium text-rose-800 active:bg-rose-100 disabled:opacity-60 sm:w-auto sm:rounded-lg sm:px-3 sm:py-2"
-                >
-                  {guestLoading ? "Загрузка…" : "Выбрать вина для гостей"}
-                </button>
-              ) : null}
             </div>
 
-            {guestSelectMode ? (
-              <GuestSelectBar
-                error={guestFormError}
-                saving={guestSaving}
-                onSave={() => void handleSaveGuestMenu()}
-                onCancel={exitGuestSelectMode}
+            <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1">
+              <WineFiltersBar
+                filterContext={tab}
+                nameQuery={filters.nameQuery}
+                onNameQuery={setNameQuery}
+                countryKeys={effectiveCountryKeys}
+                onCountryKeys={setCountryKeys}
+                countryOptions={countryOptions}
+                regionKey={effectiveRegionKey}
+                onRegionKey={setRegionKey}
+                regionOptions={regionOptions}
+                priceField={filters.priceField}
+                onPriceField={setPriceField}
+                priceMin={filters.priceMinStr}
+                onPriceMin={setPriceMinStr}
+                priceMax={filters.priceMaxStr}
+                onPriceMax={setPriceMaxStr}
+                ratingMin={filters.ratingMinStr}
+                onRatingMin={setRatingMinStr}
+                onReset={handleResetFilters}
               />
-            ) : null}
-
-            <WineFiltersBar
-              nameQuery={filters.nameQuery}
-              onNameQuery={setNameQuery}
-              countryKeys={effectiveCountryKeys}
-              onCountryKeys={setCountryKeys}
-              countryOptions={countryOptions}
-              regionKey={effectiveRegionKey}
-              onRegionKey={setRegionKey}
-              regionOptions={regionOptions}
-              priceField={filters.priceField}
-              onPriceField={setPriceField}
-              priceMin={filters.priceMinStr}
-              onPriceMin={setPriceMinStr}
-              priceMax={filters.priceMaxStr}
-              onPriceMax={setPriceMaxStr}
-              ratingMin={filters.ratingMinStr}
-              onRatingMin={setRatingMinStr}
-              onReset={resetFilters}
-            />
-
-            <SortBar
-              sortBy={sort.sortBy}
-              sortDir={sort.sortDir}
-              onSortBy={setSortBy}
-              onSortDir={setSortDir}
-              options={sortOptions}
-            />
+              <SortBar
+                sortBy={sort.sortBy}
+                sortDir={sort.sortDir}
+                onSortBy={setSortBy}
+                onSortDir={setSortDir}
+                options={sortOptions}
+              />
+            </div>
 
             <div className="space-y-6">
-              {hasAnySection ? (
+              {isRefreshing && data ? (
+                <TableLoadingPanel />
+              ) : hasAnySection ? (
                 WINE_COLOR_ORDER.filter(
                   (color) => (data?.sections[color]?.total ?? 0) > 0,
                 ).map((color) => {
@@ -402,22 +447,14 @@ function HomePageContent() {
                   return (
                     <section
                       key={color}
-                      className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm"
+                      className="rounded-xl border border-zinc-200 bg-white shadow-sm"
                     >
                       <div
-                        className={`flex flex-wrap items-center justify-between gap-2 px-4 py-3 sm:relative ${WINE_SECTION_HEADER_CLASS[color]}`}
+                        className={`px-4 py-2 ${WINE_SECTION_HEADER_CLASS[color]}`}
                       >
                         <h2 className="text-sm font-semibold">
                           {WINE_COLOR_LABEL[color]}
                         </h2>
-                        <div className="text-xs opacity-80 sm:absolute sm:right-4 sm:top-1/2 sm:-translate-y-1/2 sm:text-right">
-                          <div>{total} по фильтру</div>
-                          {visible.length < total ? (
-                            <div className="mt-0.5">
-                              {visible.length} из {total}
-                            </div>
-                          ) : null}
-                        </div>
                       </div>
 
                       {guestSelectMode && tab === "collection" ? (
@@ -432,6 +469,7 @@ function HomePageContent() {
                         />
                       ) : (
                         <WineTable
+                          variant={tab === "drank" ? "drank" : "collection"}
                           wines={visible}
                           showActions
                           countryOptions={countryOptions}
@@ -439,17 +477,27 @@ function HomePageContent() {
                           onRestore={tab === "drank" ? handleRestore : undefined}
                           onUpdate={handleUpdate}
                           onDelete={handleDelete}
+                          onCopy={
+                            tab === "collection"
+                              ? (wine) => openAddWine(wine)
+                              : undefined
+                          }
                         />
                       )}
 
                       {canShowMore ? (
-                        <div className="border-t border-zinc-100 px-4 py-3">
+                        <div className="border-t border-zinc-100 px-4 py-2">
                           <button
                             type="button"
                             onClick={() => showMore(color)}
-                            className="min-h-11 w-full rounded-xl border border-zinc-200 bg-zinc-50 text-sm font-medium text-zinc-800 active:bg-zinc-100 sm:rounded-lg sm:py-2"
+                            disabled={loadingMoreColor !== null}
+                            className="flex min-h-9 w-full items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 text-sm font-medium text-zinc-800 active:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
                           >
-                            Показать ещё {WINE_TABLE_PAGE_SIZE}
+                            {loadingMoreColor === color ? (
+                              <LoadingSpinner label="Загрузка…" />
+                            ) : (
+                              "Показать ещё"
+                            )}
                           </button>
                         </div>
                       ) : null}
@@ -462,17 +510,27 @@ function HomePageContent() {
                 </div>
               )}
             </div>
+
+            {guestSelectMode && tab === "collection" ? (
+              <GuestSelectFooter
+                error={guestFormError}
+                saving={guestSaving}
+                onSave={() => void handleSaveGuestMenu()}
+                onCancel={exitGuestSelectMode}
+              />
+            ) : null}
           </>
         )}
       </main>
 
       <AddWineModal
         open={isAddOpen}
-        onClose={() => setIsAddOpen(false)}
+        copyFrom={addWineCopyFrom}
+        onClose={closeAddWine}
         onSubmit={async (wine) => {
           try {
             await addWineApi({ ...wine, drank: false });
-            setIsAddOpen(false);
+            closeAddWine();
             await refetch();
           } catch (e) {
             alert(e instanceof Error ? e.message : String(e));
@@ -483,9 +541,9 @@ function HomePageContent() {
       <DrinkWineModal
         wine={drinkTarget}
         onClose={() => setDrinkTarget(null)}
-        onConfirm={async (quantity) => {
+        onConfirm={async (input) => {
           if (!drinkTarget) return;
-          await drinkWineApi(drinkTarget.id, quantity);
+          await drinkWineApi(drinkTarget.id, input);
           await refetch();
         }}
       />

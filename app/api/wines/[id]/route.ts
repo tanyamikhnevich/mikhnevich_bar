@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { toWineJson } from "@/lib/mapWineJson";
 import { normalizeWineGeo, normalizeWineText } from "@/lib/wineNormalize";
 import { normalizeWineVintage } from "@/lib/wineVintage";
+import { parseDrankRating } from "@/lib/wineDrankRating";
 import { parseVivinoFromRatings } from "@/lib/wineUtils";
 
 export async function PATCH(
@@ -102,6 +103,33 @@ export async function PATCH(
     if (body.vivinoRating === null || body.vivinoRating === "") data.vivinoRating = null;
     else if (typeof body.vivinoRating === "number" && Number.isFinite(body.vivinoRating)) {
       data.vivinoRating = body.vivinoRating;
+    }
+  }
+
+  if ("drankRating" in body) {
+    if (body.drankRating === null || body.drankRating === "") {
+      data.drankRating = null;
+    } else {
+      const parsed = parseDrankRating(body.drankRating);
+      if (parsed === null) {
+        return NextResponse.json({ error: "Некорректная оценка (0–10)" }, { status: 400 });
+      }
+      data.drankRating = parsed;
+    }
+  }
+
+  if ("drankNotes" in body) {
+    const v = body.drankNotes;
+    data.drankNotes =
+      v === null || v === undefined || v === "" ? null : String(v).trim().slice(0, 4000);
+  }
+
+  if ("drankAt" in body) {
+    if (body.drankAt === null || body.drankAt === "") {
+      data.drankAt = null;
+    } else if (typeof body.drankAt === "string") {
+      const d = new Date(body.drankAt);
+      data.drankAt = Number.isNaN(d.getTime()) ? null : d;
     }
   }
 

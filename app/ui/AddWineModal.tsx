@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { NewWineInput, WineColor } from "@/lib/wines";
+import type { NewWineInput, Wine, WineColor } from "@/lib/wines";
 import {
   WINE_CURRENCY_OTHER_VALUE,
   WINE_CURRENCY_PRESETS,
@@ -13,6 +13,7 @@ import {
   WINE_COUNTRY_OTHER_VALUE,
   WINE_REGION_OTHER_VALUE,
 } from "@/lib/wineNormalize";
+import { wineToAddFormDefaults } from "@/lib/wineAddTemplate";
 import {
   parseVintageFromFormInput,
   WINE_VINTAGE_NV,
@@ -205,10 +206,13 @@ export function AddWineModal({
   open,
   onClose,
   onSubmit,
+  copyFrom,
 }: {
   open: boolean;
   onClose: () => void;
   onSubmit: (wine: NewWineInput) => void | Promise<void>;
+  /** Заполнить форму данными скопированного вина */
+  copyFrom?: Wine | null;
 }) {
   const [form, setForm] = useState(createEmptyForm);
   const [dbCountries, setDbCountries] = useState<string[]>([]);
@@ -247,7 +251,11 @@ export function AddWineModal({
   useEffect(() => {
     if (!open) return;
     queueMicrotask(() => {
-      setForm(createEmptyForm());
+      if (copyFrom) {
+        setForm({ ...createEmptyForm(), ...wineToAddFormDefaults(copyFrom) });
+      } else {
+        setForm(createEmptyForm());
+      }
       setRegionOptions([]);
       setSubmitError(null);
     });
@@ -255,7 +263,7 @@ export function AddWineModal({
       .then((r) => r.json())
       .then((d: { countries?: string[] }) => setDbCountries(d.countries ?? []))
       .catch(() => setDbCountries([]));
-  }, [open]);
+  }, [open, copyFrom]);
 
   useEffect(() => {
     if (!open) return;
@@ -306,6 +314,15 @@ export function AddWineModal({
     setSubmitError(null);
   };
 
+  useEffect(() => {
+    if (!open || regionsLoading || isCountryOther) return;
+    const r = form.regionSelect.trim();
+    if (!r || r === WINE_REGION_OTHER_VALUE) return;
+    if (regionOptions.length > 0 && !regionOptions.includes(r)) {
+      patch({ regionSelect: WINE_REGION_OTHER_VALUE, regionOther: r });
+    }
+  }, [open, regionsLoading, isCountryOther, regionOptions, form.regionSelect]);
+
   if (!open) return null;
 
   return (
@@ -325,7 +342,9 @@ export function AddWineModal({
               Добавить вино
             </h2>
             <p className="mt-1 text-sm text-zinc-600">
-              Поля со звёздочкой обязательны
+              {copyFrom
+                ? `На основе «${copyFrom.name.trim()}» — измените нужные поля`
+                : "Поля со звёздочкой обязательны"}
             </p>
           </div>
           <button

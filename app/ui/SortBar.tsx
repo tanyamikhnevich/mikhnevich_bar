@@ -12,33 +12,34 @@ type Props = {
   options: Option[];
 };
 
+const selectClass =
+  "h-7 max-w-[9.5rem] min-w-0 rounded border border-zinc-200 bg-white px-1.5 text-xs text-zinc-900";
+
 export function SortBar({ sortBy, sortDir, onSortBy, onSortDir, options }: Props) {
   return (
-    <div className="mb-4 rounded-xl border border-zinc-200 bg-white p-3 shadow-sm sm:mb-5 sm:px-4 sm:py-3">
-      <p className="mb-2 text-xs font-medium text-zinc-500 sm:mb-0 sm:inline sm:mr-3">
-        Сортировка
-      </p>
-      <div className="grid grid-cols-1 gap-2 sm:inline-grid sm:grid-cols-2 sm:gap-3">
-        <select
-          value={sortBy}
-          onChange={(e) => onSortBy(e.target.value as WineSortKey)}
-          className="h-11 w-full rounded-lg border border-zinc-200 bg-white px-3 text-base text-zinc-900 sm:h-9 sm:text-sm"
-        >
-          {options.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-        <select
-          value={sortDir}
-          onChange={(e) => onSortDir(e.target.value as "asc" | "desc")}
-          className="h-11 w-full rounded-lg border border-zinc-200 bg-white px-3 text-base text-zinc-900 sm:h-9 sm:text-sm"
-        >
-          <option value="desc">по убыванию</option>
-          <option value="asc">по возрастанию</option>
-        </select>
-      </div>
+    <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-zinc-600">
+      <span className="shrink-0 text-zinc-500">Сорт.</span>
+      <select
+        value={sortBy}
+        onChange={(e) => onSortBy(e.target.value as WineSortKey)}
+        className={selectClass}
+        aria-label="Поле сортировки"
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      <select
+        value={sortDir}
+        onChange={(e) => onSortDir(e.target.value as "asc" | "desc")}
+        className={`${selectClass} max-w-[7.5rem]`}
+        aria-label="Направление сортировки"
+      >
+        <option value="desc">↓ убыв.</option>
+        <option value="asc">↑ возр.</option>
+      </select>
     </div>
   );
 }

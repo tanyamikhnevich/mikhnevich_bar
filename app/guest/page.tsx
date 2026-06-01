@@ -6,6 +6,7 @@ import { SortBar } from "../ui/SortBar";
 import { WineFiltersBar } from "../ui/WineFiltersBar";
 import { GuestWineTable } from "../ui/GuestWineTable";
 import { useGuestWines } from "@/lib/wines";
+import { sortOptionsFor } from "@/lib/wineListUi";
 import type { WineColor, WineSortKey } from "@/lib/wines";
 import {
   groupWinesByColor,
@@ -108,13 +109,7 @@ export default function GuestPage() {
     setRatingMinStr("");
   };
 
-  const sortOptions: { value: WineSortKey; label: string }[] = [
-    { value: "guestBottlePrice", label: "цена за бутылку" },
-    { value: "guestGlassPrice", label: "цена за бокал" },
-    { value: "vivinoRating", label: "рейтинг Vivino" },
-    { value: "year", label: "год" },
-    { value: "name", label: "название" },
-  ];
+  const sortOptions = sortOptionsFor("guest");
 
   return (
     <div className="min-h-full bg-zinc-50 text-zinc-900">
@@ -139,33 +134,35 @@ export default function GuestPage() {
           <div className="py-16 text-center text-sm text-zinc-500">Загрузка…</div>
         ) : (
           <>
-            <WineFiltersBar
-              nameQuery={nameQuery}
-              onNameQuery={setNameQuery}
-              countryKeys={effectiveCountryKeys}
-              onCountryKeys={setCountryKeys}
-              countryOptions={countryOptions}
-              regionKey={effectiveRegionKey}
-              onRegionKey={setRegionKey}
-              regionOptions={regionOptions}
-              priceField={priceField}
-              onPriceField={setPriceField}
-              priceMin={priceMinStr}
-              onPriceMin={setPriceMinStr}
-              priceMax={priceMaxStr}
-              onPriceMax={setPriceMaxStr}
-              ratingMin={ratingMinStr}
-              onRatingMin={setRatingMinStr}
-              onReset={resetFilters}
-            />
-
-            <SortBar
-              sortBy={sortBy}
-              sortDir={sortDir}
-              onSortBy={setSortBy}
-              onSortDir={setSortDir}
-              options={sortOptions}
-            />
+            <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1">
+              <WineFiltersBar
+                filterContext="guest"
+                nameQuery={nameQuery}
+                onNameQuery={setNameQuery}
+                countryKeys={effectiveCountryKeys}
+                onCountryKeys={setCountryKeys}
+                countryOptions={countryOptions}
+                regionKey={effectiveRegionKey}
+                onRegionKey={setRegionKey}
+                regionOptions={regionOptions}
+                priceField={priceField}
+                onPriceField={setPriceField}
+                priceMin={priceMinStr}
+                onPriceMin={setPriceMinStr}
+                priceMax={priceMaxStr}
+                onPriceMax={setPriceMaxStr}
+                ratingMin={ratingMinStr}
+                onRatingMin={setRatingMinStr}
+                onReset={resetFilters}
+              />
+              <SortBar
+                sortBy={sortBy}
+                sortDir={sortDir}
+                onSortBy={setSortBy}
+                onSortDir={setSortDir}
+                options={sortOptions}
+              />
+            </div>
 
             <div className="space-y-6">
               {WINE_COLOR_ORDER.some((c) => sortedFiltered[c].length > 0) ? (
@@ -179,22 +176,14 @@ export default function GuestPage() {
                     return (
                       <section
                         key={color}
-                        className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm"
+                        className="rounded-xl border border-zinc-200 bg-white shadow-sm"
                       >
                         <div
-                          className={`flex flex-wrap items-center justify-between gap-2 px-4 py-3 ${WINE_SECTION_HEADER_CLASS[color]}`}
+                          className={`px-4 py-2 ${WINE_SECTION_HEADER_CLASS[color]}`}
                         >
                           <h2 className="text-sm font-semibold">
                             {WINE_COLOR_LABEL[color]}
                           </h2>
-                          <div className="text-xs opacity-80">
-                            <div>{full.length} по фильтру</div>
-                            {visible.length < full.length ? (
-                              <div className="mt-0.5">
-                                {visible.length} из {full.length}
-                              </div>
-                            ) : null}
-                          </div>
                         </div>
 
                         <GuestWineTable wines={visible} variant="guest" />
@@ -213,7 +202,7 @@ export default function GuestPage() {
                               }
                               className="min-h-11 w-full rounded-xl border border-zinc-200 bg-zinc-50 text-sm font-medium text-zinc-800 active:bg-zinc-100 sm:rounded-lg sm:py-2"
                             >
-                              Показать ещё {WINE_TABLE_PAGE_SIZE}
+                              Показать ещё
                             </button>
                           </div>
                         ) : null}
