@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { collectionSortValueIls } from "./winePriceIls";
 import { compareWineYears } from "./wineUtils";
 
 export const WINE_COLOR_ORDER = ["red", "white", "rose", "sparkling"] as const;
@@ -49,6 +50,9 @@ export type Wine = {
   quantity: number;
   color: WineColor;
   drank: boolean;
+  drankAt?: string | null;
+  drankRating?: number | null;
+  drankNotes?: string | null;
   notes?: string | null;
 };
 
@@ -96,6 +100,9 @@ function normalizeWine(raw: Partial<Wine> & { name: string; producer: string }):
     quantity: qty,
     color,
     drank: Boolean(raw.drank),
+    drankAt: raw.drankAt ?? null,
+    drankRating: raw.drankRating ?? null,
+    drankNotes: raw.drankNotes ?? null,
     notes: raw.notes ?? null,
   };
 }
@@ -168,6 +175,21 @@ export function sortWines(
         break;
       case "vivinoRating":
         c = cmpNum(a.vivinoRating, b.vivinoRating);
+        if (c === 0) c = a.name.localeCompare(b.name, "ru");
+        break;
+      case "drankAt": {
+        const ta = a.drankAt ? new Date(a.drankAt).getTime() : null;
+        const tb = b.drankAt ? new Date(b.drankAt).getTime() : null;
+        c = cmpNum(ta, tb);
+        if (c === 0) c = a.name.localeCompare(b.name, "ru");
+        break;
+      }
+      case "drankRating":
+        c = cmpNum(a.drankRating, b.drankRating);
+        if (c === 0) c = a.name.localeCompare(b.name, "ru");
+        break;
+      case "collectionValue":
+        c = cmpNum(collectionSortValueIls(a), collectionSortValueIls(b));
         if (c === 0) c = a.name.localeCompare(b.name, "ru");
         break;
       case "year":

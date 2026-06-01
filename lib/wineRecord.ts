@@ -3,7 +3,13 @@ import type { Wine } from "./generated/prisma/client";
 /** Поля вина для создания дубликата (без id и timestamps). */
 export function wineDuplicateCreateData(
   w: Wine,
-  opts: { quantity: number; drank: boolean },
+  opts: {
+    quantity: number;
+    drank: boolean;
+    drankAt?: Date | null;
+    drankRating?: number | null;
+    drankNotes?: string | null;
+  },
 ) {
   return {
     name: w.name,
@@ -29,6 +35,9 @@ export function wineDuplicateCreateData(
     quantity: opts.quantity,
     color: w.color,
     drank: opts.drank,
+    drankAt: opts.drank ? (opts.drankAt ?? new Date()) : null,
+    drankRating: opts.drank ? (opts.drankRating ?? null) : null,
+    drankNotes: opts.drank ? (opts.drankNotes ?? null) : null,
     notes: w.notes,
   };
 }

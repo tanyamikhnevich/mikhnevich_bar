@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useState, type ReactNode } from "react";
 import type { Wine } from "@/lib/wines";
 import {
   displayNotes,
@@ -10,14 +10,46 @@ import {
   formatWineYear,
 } from "@/lib/wines";
 import { countryCodeToFlagEmoji } from "@/lib/wineUtils";
+import { CountryTruncate, TruncateWithTooltip } from "./TruncateWithTooltip";
 import { WineRowEditor } from "./WineRowEditor";
 import { WineMobileList } from "./WineMobileList";
+import { formatDrankRating } from "@/lib/wineDrankRating";
+import {
+  drankDisplayFromExcel,
+  type DrankExcelMetaEntry,
+} from "@/lib/myWinesXlsxDrankMeta";
+import drankExcelMetaFile from "@/data/drank-excel-meta.json";
+import {
+  useWineRowMouseLeaveHandler,
+  useWineTableMouseLeaveHandler,
+  WineTableTooltipProvider,
+} from "./WineTableTooltipContext";
 
-const ROW_H = "h-[4.5rem]";
-const ROW_MAX = "max-h-[4.5rem]";
+const EXCEL_META_BY_ROW = drankExcelMetaFile.byRow as Record<
+  string,
+  DrankExcelMetaEntry
+>;
 
-const cellBase =
-  "min-w-0 select-text align-middle text-zinc-800 overflow-visible";
+function TableCellWrap({
+  children,
+  align = "center",
+}: {
+  children: ReactNode;
+  align?: "center" | "start";
+}) {
+  const justify =
+    align === "start" ? "justify-start" : "justify-center";
+  return (
+    <div className={`flex h-full w-full min-w-0 items-center ${justify}`}>
+      {children}
+    </div>
+  );
+}
+
+const ROW_H = "h-8";
+const ROW_MAX = "max-h-8";
+
+const cellBase = "min-w-0 select-text align-middle text-zinc-800";
 const cellCenter = `${cellBase} text-center`;
 
 /** Доли ширины (сумма 100%). */
@@ -25,111 +57,16 @@ const COL_PCT = [
   5.5, 15.5, 9.5, 2.5, 6.5, 6.5, 8, 7.5, 5, 6.5, 6, 6, 3, 14,
 ] as const;
 
-const TOOLTIP_BOX =
-  "pointer-events-none absolute bottom-full z-[100] mb-1 hidden w-max max-w-[min(18rem,calc(100vw-2rem))] whitespace-normal rounded border border-zinc-300/90 bg-zinc-100 px-2.5 py-1.5 text-left text-[10px] font-normal leading-snug text-zinc-800 shadow-md group-hover:block sm:text-[11px]";
+const COL_PCT_Drank = [
+  4.5, 14, 7.5, 2.5, 5.5, 5, 5.5, 5, 4, 5, 5, 5, 3.5, 6, 13,
+] as const;
 
-function isElementOverflowing(el: HTMLElement) {
-  return (
-    el.scrollHeight > el.clientHeight + 1 ||
-    el.scrollWidth > el.clientWidth + 1
-  );
-}
+type WineTableVariant = "collection" | "drank";
 
-function useIsOverflowing<T extends HTMLElement>(deps: unknown[]) {
-  const ref = useRef<T>(null);
-  const [isOverflowing, setIsOverflowing] = useState(false);
-
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) {
-      setIsOverflowing(false);
-      return;
-    }
-
-    const measure = () => setIsOverflowing(isElementOverflowing(el));
-    measure();
-
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-
-    return () => ro.disconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- remeasure when content/layout inputs change
-  }, deps);
-
-  return { ref, isOverflowing };
-}
-
-function ClampedText({
-  text,
-  lines,
-  className = "",
-  tooltip,
-  tooltipAlign = "center",
-}: {
-  text: string | null | undefined;
-  lines: 2 | 3;
-  className?: string;
-  tooltip?: string;
-  tooltipAlign?: "center" | "left";
-}) {
-  const value = (text && String(text).trim()) || "—";
-  const tipText = (tooltip && tooltip.trim()) || (value !== "—" ? value : "");
-  const clamp = lines === 2 ? "line-clamp-2" : "line-clamp-3";
-  const tipPos =
-    tooltipAlign === "left" ? "left-0" : "left-1/2 -translate-x-1/2";
-  const { ref, isOverflowing } = useIsOverflowing<HTMLDivElement>([value, lines]);
-  const showTip = Boolean(tipText) && isOverflowing;
-
-  return (
-    <div
-      className={`group relative w-full ${showTip ? "cursor-default" : ""} ${className}`}
-    >
-      <div
-        ref={ref}
-        className={`${clamp} overflow-hidden break-words select-text`}
-      >
-        {value}
-      </div>
-      {showTip ? (
-        <div role="tooltip" className={`${TOOLTIP_BOX} ${tipPos}`}>
-          {tipText}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function CountryLabel({
-  countryLine,
-  flag,
-}: {
-  countryLine: string;
-  flag: string | null;
-}) {
-  const { ref, isOverflowing } = useIsOverflowing<HTMLSpanElement>([countryLine]);
-  const showTip = countryLine !== "—" && isOverflowing;
-
-  return (
-    <div
-      className={`group relative flex h-full items-center justify-start gap-1 overflow-hidden ${showTip ? "cursor-default" : ""}`}
-    >
-      {flag ? (
-        <span className="shrink-0 text-base leading-none sm:text-lg" aria-hidden>
-          {flag}
-        </span>
-      ) : null}
-      <span
-        ref={ref}
-        className="min-w-0 max-w-[min(100%,5.5rem)] truncate select-text text-left text-[10px] sm:text-[11px]"
-      >
-        {countryLine}
-      </span>
-      {showTip ? (
-        <div role="tooltip" className={`${TOOLTIP_BOX} left-0`}>
-          {countryLine}
-        </div>
-      ) : null}
-    </div>
+function confirmRestore(wine: Wine): boolean {
+  const label = wine.name?.trim() || "эту запись";
+  return window.confirm(
+    `Вы уверены, что хотите вернуть «${label}» в коллекцию?`,
   );
 }
 
@@ -147,6 +84,24 @@ function PencilIcon() {
     >
       <path d="M12 20h9" />
       <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  );
+}
+
+function CopyIcon() {
+  return (
+    <svg
+      className="size-3.5"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <rect x="9" y="9" width="13" height="13" rx="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
     </svg>
   );
 }
@@ -182,7 +137,7 @@ function IconButton({
   title: string;
   onClick: () => void;
   disabled?: boolean;
-  children: React.ReactNode;
+  children: ReactNode;
   className?: string;
 }) {
   return (
@@ -204,14 +159,17 @@ function IconButton({
 
 export function WineTable({
   wines,
+  variant = "collection",
   showActions = true,
   countryOptions = [],
   onDrink,
   onRestore,
   onUpdate,
   onDelete,
+  onCopy,
 }: {
   wines: Wine[];
+  variant?: WineTableVariant;
   showActions?: boolean;
   countryOptions?: string[];
   onDrink?: (wine: Wine) => void | Promise<void>;
@@ -221,6 +179,7 @@ export function WineTable({
     patch: Record<string, unknown>,
   ) => void | Promise<void>;
   onDelete?: (wine: Wine) => void | Promise<void>;
+  onCopy?: (wine: Wine) => void;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -234,13 +193,14 @@ export function WineTable({
     );
   }
 
-  const cols = showActions ? [...COL_PCT] : COL_PCT.slice(0, -1);
+  const baseCols = variant === "drank" ? COL_PCT_Drank : COL_PCT;
+  const cols = showActions ? [...baseCols] : baseCols.slice(0, -1);
   const scale = showActions
     ? 1
-    : 100 / COL_PCT.slice(0, -1).reduce((a, b) => a + b, 0);
+    : 100 / baseCols.slice(0, -1).reduce((a, b) => a + b, 0);
 
-  const rowCellClass = `${ROW_H} ${ROW_MAX} px-1 sm:px-1.5 py-0`;
-  const hasRowActions = Boolean(onDrink || onRestore || onUpdate || onDelete);
+  const rowCellClass = `${ROW_H} ${ROW_MAX} px-0.5 sm:px-1 py-0`;
+  const hasRowActions = Boolean(onDrink || onRestore || onUpdate || onDelete || onCopy);
 
   const handleDelete = async (wine: Wine) => {
     if (!onDelete) return;
@@ -257,19 +217,100 @@ export function WineTable({
     }
   };
 
+  const handleRestore = async (wine: Wine) => {
+    if (!onRestore) return;
+    if (!confirmRestore(wine)) return;
+    await onRestore(wine);
+  };
+
   return (
     <>
       <WineMobileList
-        variant="collection"
+        variant={variant}
         wines={wines}
         countryOptions={countryOptions}
         onDrink={onDrink}
-        onRestore={onRestore}
+        onRestore={onRestore ? handleRestore : undefined}
         onUpdate={onUpdate}
         onDelete={onDelete}
       />
       <div className="hidden w-full min-w-0 md:block md:overflow-visible">
-      <table className="w-full table-fixed border-collapse select-text text-[11px] leading-snug sm:text-[12px]">
+      <WineTableTooltipProvider>
+      <WineTableDesktop
+        variant={variant}
+        cols={cols}
+        showActions={showActions}
+        scale={scale}
+        wines={wines}
+        countryOptions={countryOptions}
+        onDrink={onDrink}
+        onRestore={onRestore ? handleRestore : undefined}
+        onUpdate={onUpdate}
+        onDelete={onDelete}
+        onCopy={onCopy}
+        editingId={editingId}
+        setEditingId={setEditingId}
+        savingId={savingId}
+        setSavingId={setSavingId}
+        deletingId={deletingId}
+        handleDelete={handleDelete}
+        hasRowActions={hasRowActions}
+        rowCellClass={rowCellClass}
+      />
+      </WineTableTooltipProvider>
+    </div>
+    </>
+  );
+}
+
+function WineTableDesktop({
+  variant,
+  cols,
+  showActions,
+  scale,
+  wines,
+  countryOptions,
+  onDrink,
+  onRestore,
+  onUpdate,
+  onDelete,
+  onCopy,
+  editingId,
+  setEditingId,
+  savingId,
+  setSavingId,
+  deletingId,
+  handleDelete,
+  hasRowActions,
+  rowCellClass,
+}: {
+  variant: WineTableVariant;
+  cols: number[];
+  showActions: boolean;
+  scale: number;
+  wines: Wine[];
+  countryOptions: string[];
+  onDrink?: (wine: Wine) => void | Promise<void>;
+  onRestore?: (wine: Wine) => void | Promise<void>;
+  onUpdate?: (wine: Wine, patch: Record<string, unknown>) => void | Promise<void>;
+  onDelete?: (wine: Wine) => void | Promise<void>;
+  onCopy?: (wine: Wine) => void;
+  editingId: string | null;
+  setEditingId: (id: string | null) => void;
+  savingId: string | null;
+  setSavingId: (id: string | null) => void;
+  deletingId: string | null;
+  handleDelete: (wine: Wine) => Promise<void>;
+  hasRowActions: boolean;
+  rowCellClass: string;
+}) {
+  const onTableLeave = useWineTableMouseLeaveHandler();
+
+  return (
+      <table
+        onMouseLeave={onTableLeave}
+        className="w-full table-fixed border-collapse select-text text-[11px] leading-snug sm:text-[12px]"
+      >
         <colgroup>
           {cols.map((w, i) => (
             <col
@@ -279,8 +320,10 @@ export function WineTable({
           ))}
         </colgroup>
         <thead className="bg-zinc-50 text-center text-[10px] font-semibold text-zinc-600 sm:text-[11px]">
-          <tr className="[&>th]:align-bottom [&>th]:px-1 [&>th]:py-1 sm:[&>th]:px-1.5 sm:[&>th]:py-1.5">
-            <th className="whitespace-nowrap">Дата</th>
+          <tr className="[&>th]:align-bottom [&>th]:px-0.5 [&>th]:py-0.5 sm:[&>th]:px-1 sm:[&>th]:py-1">
+            <th className="whitespace-nowrap">
+              {variant === "drank" ? "Когда" : "Дата"}
+            </th>
             <th className="whitespace-normal">Название</th>
             <th className="whitespace-normal">Производитель</th>
             <th className="whitespace-nowrap pr-2 sm:pr-3">Год</th>
@@ -292,15 +335,92 @@ export function WineTable({
             <th className="whitespace-nowrap">Покупка</th>
             <th className="whitespace-nowrap">Израиль</th>
             <th className="whitespace-nowrap">Оригинал</th>
-            <th className="whitespace-normal">Количество</th>
+            {variant === "drank" ? (
+              <>
+                <th className="whitespace-normal">Оценка</th>
+                <th className="whitespace-normal">Заметки</th>
+              </>
+            ) : (
+              <th className="whitespace-normal">Количество</th>
+            )}
             {showActions ? <th className="whitespace-nowrap"></th> : null}
           </tr>
         </thead>
 
+        <WineTableTbody
+          variant={variant}
+          wines={wines}
+          cols={cols}
+          showActions={showActions}
+          hasRowActions={hasRowActions}
+          rowCellClass={rowCellClass}
+          countryOptions={countryOptions}
+          onDrink={onDrink}
+          onRestore={onRestore}
+          onUpdate={onUpdate}
+          onDelete={onDelete}
+          onCopy={onCopy}
+          editingId={editingId}
+          setEditingId={setEditingId}
+          savingId={savingId}
+          setSavingId={setSavingId}
+          deletingId={deletingId}
+          handleDelete={handleDelete}
+        />
+      </table>
+  );
+}
+
+function WineTableTbody({
+  variant,
+  wines,
+  cols,
+  showActions,
+  hasRowActions,
+  rowCellClass,
+  countryOptions,
+  onDrink,
+  onRestore,
+  onUpdate,
+  onDelete,
+  onCopy,
+  editingId,
+  setEditingId,
+  savingId,
+  setSavingId,
+  deletingId,
+  handleDelete,
+}: {
+  variant: WineTableVariant;
+  wines: Wine[];
+  cols: number[];
+  showActions: boolean;
+  hasRowActions: boolean;
+  rowCellClass: string;
+  countryOptions: string[];
+  onDrink?: (wine: Wine) => void | Promise<void>;
+  onRestore?: (wine: Wine) => void | Promise<void>;
+  onUpdate?: (wine: Wine, patch: Record<string, unknown>) => void | Promise<void>;
+  onDelete?: (wine: Wine) => void | Promise<void>;
+  onCopy?: (wine: Wine) => void;
+  editingId: string | null;
+  setEditingId: (id: string | null) => void;
+  savingId: string | null;
+  setSavingId: (id: string | null) => void;
+  deletingId: string | null;
+  handleDelete: (wine: Wine) => Promise<void>;
+}) {
+  const onRowLeave = useWineRowMouseLeaveHandler();
+
+  return (
         <tbody className="divide-y divide-zinc-100 text-zinc-800">
           {wines.map((w) => {
             const extra = displayNotes(w.notes);
             const ratingsText = displayRatings(w);
+            const drankDisplay =
+              variant === "drank"
+                ? drankDisplayFromExcel(w, EXCEL_META_BY_ROW)
+                : null;
             const flag = countryCodeToFlagEmoji(w.countryCode);
             const countryLine = (w.country && w.country.trim()) || "—";
             const nameText = w.name?.trim() || "—";
@@ -309,30 +429,35 @@ export function WineTable({
               undefined;
             const isEditing = editingId === w.id;
             const isBusy = savingId === w.id || deletingId === w.id;
+            const dateLabel =
+              variant === "drank"
+                ? w.drankAt
+                  ? formatDateRU(w.drankAt.slice(0, 10))
+                  : "—"
+                : formatDateRU(w.purchaseDate);
 
             return (
               <Fragment key={w.id}>
-                <tr className={ROW_H}>
+                <tr className={ROW_H} onMouseLeave={onRowLeave}>
                   <td className={`${cellCenter} ${rowCellClass} whitespace-nowrap text-zinc-600`}>
                     <div className="flex h-full items-center justify-center">
-                      {formatDateRU(w.purchaseDate)}
+                      {dateLabel}
                     </div>
                   </td>
                   <td className={`${cellBase} ${rowCellClass} text-left font-medium text-zinc-900`}>
-                    <div className="flex h-full items-center justify-start">
-                      <ClampedText
+                    <TableCellWrap align="start">
+                      <TruncateWithTooltip
                         text={nameText}
-                        lines={2}
                         className="w-full text-left"
                         tooltip={nameTip}
                         tooltipAlign="left"
                       />
-                    </div>
+                    </TableCellWrap>
                   </td>
                   <td className={`${cellCenter} ${rowCellClass} text-zinc-700`}>
-                    <div className="flex h-full items-center justify-center">
-                      <ClampedText text={w.producer} lines={2} />
-                    </div>
+                    <TableCellWrap>
+                      <TruncateWithTooltip text={w.producer} />
+                    </TableCellWrap>
                   </td>
                   <td className={`${cellCenter} ${rowCellClass} pr-2 text-zinc-700 sm:pr-3`}>
                     <div className="flex h-full items-center justify-center">
@@ -340,27 +465,27 @@ export function WineTable({
                     </div>
                   </td>
                   <td className={`${cellBase} ${rowCellClass} pl-2 text-left text-zinc-700 sm:pl-3`}>
-                    <CountryLabel countryLine={countryLine} flag={flag} />
+                    <CountryTruncate countryLine={countryLine} flag={flag} align="start" />
                   </td>
                   <td className={`${cellCenter} ${rowCellClass} text-zinc-700`}>
-                    <div className="flex h-full items-center justify-center">
-                      <ClampedText text={w.region} lines={2} />
-                    </div>
+                    <TableCellWrap>
+                      <TruncateWithTooltip text={w.region} />
+                    </TableCellWrap>
                   </td>
                   <td className={`${cellCenter} ${rowCellClass} text-zinc-600`}>
-                    <div className="flex h-full items-center justify-center">
-                      <ClampedText text={w.subregion} lines={3} />
-                    </div>
+                    <TableCellWrap>
+                      <TruncateWithTooltip text={w.subregion} />
+                    </TableCellWrap>
                   </td>
                   <td className={`${cellCenter} ${rowCellClass} text-zinc-600`}>
-                    <div className="flex h-full items-center justify-center">
-                      <ClampedText text={w.grape} lines={3} />
-                    </div>
+                    <TableCellWrap>
+                      <TruncateWithTooltip text={w.grape} />
+                    </TableCellWrap>
                   </td>
                   <td className={`${cellCenter} ${rowCellClass}`}>
-                    <div className="flex h-full items-center justify-center">
-                      <ClampedText text={ratingsText || undefined} lines={2} />
-                    </div>
+                    <TableCellWrap>
+                      <TruncateWithTooltip text={ratingsText || undefined} />
+                    </TableCellWrap>
                   </td>
                   <td className={`${cellCenter} ${rowCellClass} whitespace-nowrap`}>
                     <div className="flex h-full items-center justify-center">
@@ -377,15 +502,34 @@ export function WineTable({
                       {formatAmountWithCurrency(w.originPrice, w.originCurrency)}
                     </div>
                   </td>
-                  <td className={`${cellCenter} ${rowCellClass} font-medium text-zinc-900`}>
-                    <div className="flex h-full items-center justify-center">
-                      {w.quantity}
-                    </div>
-                  </td>
+                  {variant === "drank" ? (
+                    <>
+                      <td className={`${cellCenter} ${rowCellClass}`}>
+                        <TableCellWrap>
+                          {drankDisplay?.rating != null
+                            ? formatDrankRating(drankDisplay.rating)
+                            : "—"}
+                        </TableCellWrap>
+                      </td>
+                      <td className={`${cellCenter} ${rowCellClass}`}>
+                        <TableCellWrap align="start">
+                          <TruncateWithTooltip
+                            text={drankDisplay?.notes || "—"}
+                          />
+                        </TableCellWrap>
+                      </td>
+                    </>
+                  ) : (
+                    <td className={`${cellCenter} ${rowCellClass} font-medium text-zinc-900`}>
+                      <div className="flex h-full items-center justify-center">
+                        {w.quantity}
+                      </div>
+                    </td>
+                  )}
                   {showActions && hasRowActions ? (
                     <td className={`${cellCenter} ${rowCellClass}`}>
                       <div className="flex h-full items-center justify-center gap-0.5">
-                        {w.drank ? (
+                        {variant === "drank" || w.drank ? (
                           onRestore ? (
                             <button
                               type="button"
@@ -416,6 +560,16 @@ export function WineTable({
                             <PencilIcon />
                           </IconButton>
                         ) : null}
+                        {onCopy && !w.drank ? (
+                          <IconButton
+                            title="Скопировать для нового вина"
+                            disabled={isBusy}
+                            onClick={() => onCopy(w)}
+                            className="text-zinc-500 hover:bg-zinc-100 hover:text-rose-700"
+                          >
+                            <CopyIcon />
+                          </IconButton>
+                        ) : null}
                         {onDelete ? (
                           <IconButton
                             title="Удалить"
@@ -435,6 +589,7 @@ export function WineTable({
                     <td colSpan={cols.length} className="bg-zinc-50/80 px-2 py-2 sm:px-3">
                       <WineRowEditor
                         wine={w}
+                        variant={variant}
                         countryOptions={countryOptions}
                         saving={savingId === w.id}
                         onCancel={() => setEditingId(null)}
@@ -458,8 +613,5 @@ export function WineTable({
             );
           })}
         </tbody>
-      </table>
-    </div>
-    </>
   );
 }

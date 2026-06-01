@@ -52,11 +52,30 @@ export type DrinkApiResponse = {
   drank: Wine;
 };
 
-export async function drinkWineApi(id: string, quantity = 1): Promise<DrinkApiResponse> {
+export type DrinkWineInput = {
+  quantity?: number;
+  drankRating?: number | null;
+  drankNotes?: string | null;
+};
+
+export async function drinkWineApi(
+  id: string,
+  input: number | DrinkWineInput = 1,
+): Promise<DrinkApiResponse> {
+  const body =
+    typeof input === "number"
+      ? { quantity: input }
+      : {
+          quantity: input.quantity ?? 1,
+          ...(input.drankRating != null ? { drankRating: input.drankRating } : {}),
+          ...(input.drankNotes != null && input.drankNotes !== ""
+            ? { drankNotes: input.drankNotes }
+            : {}),
+        };
   const res = await fetch(`/api/wines/${id}/drink`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ quantity }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(await parseErrorMessage(res));
   return (await res.json()) as DrinkApiResponse;

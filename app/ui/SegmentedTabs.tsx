@@ -9,10 +9,12 @@ export function SegmentedTabs<T extends string>({
   value,
   onChange,
   options,
+  disabled = false,
 }: {
   value: T;
   onChange: (v: T) => void;
   options: Option<T>[];
+  disabled?: boolean;
 }) {
   return (
     <div className="grid w-full grid-cols-2 gap-1 rounded-xl border border-zinc-200 bg-white p-1 sm:inline-flex sm:w-auto sm:grid-cols-none">
@@ -22,8 +24,10 @@ export function SegmentedTabs<T extends string>({
           <button
             key={opt.value}
             type="button"
+            disabled={disabled}
             onClick={() => onChange(opt.value)}
             className={[
+              disabled ? "cursor-not-allowed opacity-60" : "",
               "min-h-11 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors sm:min-h-0 sm:rounded-md sm:py-2",
               active
                 ? "bg-zinc-900 text-white shadow-sm"

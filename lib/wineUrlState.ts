@@ -3,13 +3,16 @@
 import { useCallback, useMemo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
-  parseColorLimits,
-  parseCountryKeysFromSearchParams,
+  defaultSortForContext,
+  emptyWineUrlFilters,
+  isSortKeyValidForContext,
+  sanitizePriceFieldForContext,
+  type WineFilterContext,
+} from "./wineListUi";
+import {
   parseOptionalPositiveNumber,
   WINE_COLOR_ORDER,
   WINE_TABLE_PAGE_SIZE,
-  DEFAULT_WINE_SORT_BY,
-  DEFAULT_WINE_SORT_DIR,
   type WineColor,
   type WinePriceFilterField,
   type WineSortKey,
@@ -32,64 +35,117 @@ export type WineUrlSortFields = {
   sortDir: "asc" | "desc";
 };
 
-const SORT_KEYS: WineSortKey[] = [
-  "purchaseDate",
-  "purchasePrice",
-  "israelPrice",
-  "originPrice",
-  "vivinoRating",
-  "name",
-  "year",
-];
+type TabScopedState = {
+  filters: WineUrlFilterFields;
+  sort: WineUrlSortFields;
+};
+
+const DRANK_PREFIX = "d_";
 
 function parseTab(searchParams: URLSearchParams): WineListTab {
   return searchParams.get("tab") === "drank" ? "drank" : "collection";
 }
 
-function parsePriceField(raw: string | null): WinePriceFilterField {
-  return raw === "israel" || raw === "origin" ? raw : "purchase";
+function paramKey(base: string, ctx: WineFilterContext): string {
+  return ctx === "drank" ? `${DRANK_PREFIX}${base}` : base;
 }
 
-function parseSortBy(raw: string | null): WineSortKey {
-  if (raw === "none") return DEFAULT_WINE_SORT_BY;
-  return SORT_KEYS.includes(raw as WineSortKey)
-    ? (raw as WineSortKey)
-    : DEFAULT_WINE_SORT_BY;
+function parseCountryKeysForTab(
+  searchParams: URLSearchParams,
+  ctx: WineFilterContext,
+): string[] {
+  const key = paramKey("country", ctx);
+  const fromAll = searchParams
+    .getAll(key)
+    .map((c) => c.trim())
+    .filter(Boolean);
+  if (fromAll.length > 0) return [...new Set(fromAll)];
+  const single = (searchParams.get(key) ?? "").trim();
+  if (!single) return [];
+  if (single.includes(",")) {
+    return [...new Set(single.split(",").map((s) => s.trim()).filter(Boolean))];
+  }
+  return [single];
+}
+
+function parsePriceField(
+  raw: string | null,
+  ctx: WineFilterContext,
+): WinePriceFilterField {
+  const field =
+    raw === "israel" ||
+    raw === "origin" ||
+    raw === "guestBottle" ||
+    raw === "guestGlass"
+      ? raw
+      : "purchase";
+  return sanitizePriceFieldForContext(field, ctx);
+}
+
+function parseSortBy(raw: string | null, ctx: WineFilterContext): WineSortKey {
+  if (raw && isSortKeyValidForContext(raw, ctx)) return raw;
+  return defaultSortForContext(ctx).sortBy;
 }
 
 export function parseWineUrlFilters(
   searchParams: URLSearchParams,
+  ctx: WineFilterContext = "collection",
 ): WineUrlFilterFields {
   return {
-    nameQuery: (searchParams.get("name") ?? "").trim(),
-    countryKeys: parseCountryKeysFromSearchParams(searchParams),
-    regionKey: (searchParams.get("region") ?? "").trim(),
-    priceField: parsePriceField(searchParams.get("priceField")),
-    priceMinStr: (searchParams.get("priceMin") ?? "").trim(),
-    priceMaxStr: (searchParams.get("priceMax") ?? "").trim(),
-    ratingMinStr: (searchParams.get("ratingMin") ?? "").trim(),
+    nameQuery: (searchParams.get(paramKey("name", ctx)) ?? "").trim(),
+    countryKeys: parseCountryKeysForTab(searchParams, ctx),
+    regionKey: (searchParams.get(paramKey("region", ctx)) ?? "").trim(),
+    priceField: parsePriceField(
+      searchParams.get(paramKey("priceField", ctx)),
+      ctx,
+    ),
+    priceMinStr: (searchParams.get(paramKey("priceMin", ctx)) ?? "").trim(),
+    priceMaxStr: (searchParams.get(paramKey("priceMax", ctx)) ?? "").trim(),
+    ratingMinStr: (searchParams.get(paramKey("ratingMin", ctx)) ?? "").trim(),
   };
 }
 
-export function parseWineUrlSort(searchParams: URLSearchParams): WineUrlSortFields {
+export function parseWineUrlSort(
+  searchParams: URLSearchParams,
+  ctx: WineFilterContext = "collection",
+): WineUrlSortFields {
+  const defaults = defaultSortForContext(ctx);
+  const sortByKey = paramKey("sortBy", ctx);
+  const sortDirKey = paramKey("sortDir", ctx);
   return {
-    sortBy: parseSortBy(searchParams.get("sortBy")),
-    sortDir:
-      searchParams.get("sortDir") === "asc" ? "asc" : DEFAULT_WINE_SORT_DIR,
+    sortBy: searchParams.has(sortByKey)
+      ? parseSortBy(searchParams.get(sortByKey), ctx)
+      : defaults.sortBy,
+    sortDir: searchParams.has(sortDirKey)
+      ? searchParams.get(sortDirKey) === "asc"
+        ? "asc"
+        : "desc"
+      : defaults.sortDir,
+  };
+}
+
+function readTabState(
+  searchParams: URLSearchParams,
+  tab: WineListTab,
+): TabScopedState {
+  return {
+    filters: parseWineUrlFilters(searchParams, tab),
+    sort: parseWineUrlSort(searchParams, tab),
   };
 }
 
 export function parseHomeUrlState(searchParams: URLSearchParams) {
   const tab = parseTab(searchParams);
-  const filters = parseWineUrlFilters(searchParams);
-  const sort = parseWineUrlSort(searchParams);
-  const limits = parseColorLimits(searchParams);
-  return { tab, filters, sort, limits };
+  return {
+    tab,
+    filters: parseWineUrlFilters(searchParams, tab),
+    sort: parseWineUrlSort(searchParams, tab),
+  };
 }
 
 export function parseGuestUrlState(searchParams: URLSearchParams) {
-  const filters = parseWineUrlFilters(searchParams);
-  const sort = parseWineUrlSort(searchParams);
+  const filters = parseWineUrlFilters(searchParams, "guest");
+  const sort = parseWineUrlSort(searchParams, "guest");
   const limitRaw = Number(searchParams.get("limit"));
   const limit =
     Number.isFinite(limitRaw) && limitRaw >= 1
@@ -99,10 +155,8 @@ export function parseGuestUrlState(searchParams: URLSearchParams) {
 }
 
 /** Поля для API browse из URL (главная). */
-export function homeUrlToBrowseFilters(
-  searchParams: URLSearchParams,
-) {
-  const { tab, filters, sort, limits } = parseHomeUrlState(searchParams);
+export function homeUrlToBrowseFilters(searchParams: URLSearchParams) {
+  const { tab, filters, sort } = parseHomeUrlState(searchParams);
   return {
     drank: tab === "drank",
     nameQuery: filters.nameQuery,
@@ -114,7 +168,6 @@ export function homeUrlToBrowseFilters(
     ratingMin: parseOptionalPositiveNumber(filters.ratingMinStr),
     sortBy: sort.sortBy,
     sortDir: sort.sortDir,
-    limits,
   };
 }
 
@@ -151,43 +204,75 @@ function setOrDelete(params: URLSearchParams, key: string, value: string | null)
   else params.set(key, value);
 }
 
+function clearTabFilterParams(params: URLSearchParams, tab: WineListTab) {
+  const keys = [
+    "name",
+    "region",
+    "priceField",
+    "priceMin",
+    "priceMax",
+    "ratingMin",
+    "sortBy",
+    "sortDir",
+  ];
+  for (const base of keys) params.delete(paramKey(base, tab));
+  params.delete(paramKey("country", tab));
+  const countryKey = paramKey("country", tab);
+  while (params.has(countryKey)) params.delete(countryKey);
+}
+
 function writeFiltersToParams(
   params: URLSearchParams,
   filters: WineUrlFilterFields,
+  ctx: WineFilterContext,
 ) {
-  setOrDelete(params, "name", filters.nameQuery || null);
-  params.delete("country");
+  const p = (base: string) => paramKey(base, ctx);
+  setOrDelete(params, p("name"), filters.nameQuery || null);
+  const countryKey = p("country");
+  while (params.has(countryKey)) params.delete(countryKey);
   for (const c of filters.countryKeys) {
-    params.append("country", c);
+    params.append(countryKey, c);
   }
-  setOrDelete(params, "region", filters.regionKey || null);
-  setOrDelete(params, "priceField", filters.priceField === "purchase" ? null : filters.priceField);
-  setOrDelete(params, "priceMin", filters.priceMinStr || null);
-  setOrDelete(params, "priceMax", filters.priceMaxStr || null);
-  setOrDelete(params, "ratingMin", filters.ratingMinStr || null);
+  setOrDelete(params, p("region"), filters.regionKey || null);
+  setOrDelete(
+    params,
+    p("priceField"),
+    filters.priceField === "purchase" ? null : filters.priceField,
+  );
+  setOrDelete(params, p("priceMin"), filters.priceMinStr || null);
+  setOrDelete(params, p("priceMax"), filters.priceMaxStr || null);
+  setOrDelete(params, p("ratingMin"), filters.ratingMinStr || null);
 }
 
-function writeSortToParams(params: URLSearchParams, sort: WineUrlSortFields) {
-  params.set("sortBy", sort.sortBy);
-  params.set("sortDir", sort.sortDir);
+function writeSortToParams(
+  params: URLSearchParams,
+  sort: WineUrlSortFields,
+  ctx: WineFilterContext,
+) {
+  params.set(paramKey("sortBy", ctx), sort.sortBy);
+  params.set(paramKey("sortDir", ctx), sort.sortDir);
 }
 
 function clearColorLimits(params: URLSearchParams) {
   for (const color of WINE_COLOR_ORDER) params.delete(`${color}Limit`);
 }
 
-function writeColorLimits(
+function writeAllHomeTabState(
   params: URLSearchParams,
-  limits: Partial<Record<WineColor, number>>,
+  state: {
+    tab: WineListTab;
+    collection: TabScopedState;
+    drank: TabScopedState;
+  },
 ) {
-  for (const color of WINE_COLOR_ORDER) {
-    const n = limits[color];
-    if (n == null || n <= WINE_TABLE_PAGE_SIZE) {
-      params.delete(`${color}Limit`);
-    } else {
-      params.set(`${color}Limit`, String(Math.min(500, Math.round(n))));
-    }
-  }
+  clearTabFilterParams(params, "collection");
+  clearTabFilterParams(params, "drank");
+  writeFiltersToParams(params, state.collection.filters, "collection");
+  writeSortToParams(params, state.collection.sort, "collection");
+  writeFiltersToParams(params, state.drank.filters, "drank");
+  writeSortToParams(params, state.drank.sort, "drank");
+  if (state.tab === "drank") params.set("tab", "drank");
+  else params.delete("tab");
 }
 
 function buildParamsFromPatch(
@@ -195,31 +280,33 @@ function buildParamsFromPatch(
   patch: UrlPatch,
   options: { clearLimits?: boolean; mode: "home" | "guest" },
 ): URLSearchParams {
-  const home = options.mode === "home" ? parseHomeUrlState(current) : null;
-  const guest = options.mode === "guest" ? parseGuestUrlState(current) : null;
-
   const params = new URLSearchParams(current.toString());
 
-  if (options.mode === "home" && home) {
-    const tab = patch.tab ?? home.tab;
-    const filters = { ...home.filters, ...pickFilters(patch) };
-    const sort = { ...home.sort, ...pickSort(patch) };
-    let limits = { ...home.limits, ...pickLimits(patch) };
+  if (options.mode === "home") {
+    const currentTab = parseTab(current);
+    const tab = patch.tab ?? currentTab;
+    const collection = readTabState(current, "collection");
+    const drank = readTabState(current, "drank");
+    const active = tab === "drank" ? drank : collection;
 
-    if (options.clearLimits) {
-      limits = pickLimits(patch);
-      clearColorLimits(params);
-    }
+    const nextActive: TabScopedState = {
+      filters: { ...active.filters, ...pickFilters(patch) },
+      sort: { ...active.sort, ...pickSort(patch) },
+    };
 
-    if (tab === "collection") params.delete("tab");
-    else params.set("tab", "drank");
+    const next = {
+      tab,
+      collection: tab === "collection" ? nextActive : collection,
+      drank: tab === "drank" ? nextActive : drank,
+    };
 
-    writeFiltersToParams(params, filters);
-    writeSortToParams(params, sort);
-    writeColorLimits(params, limits);
+    if (options.clearLimits) clearColorLimits(params);
+    writeAllHomeTabState(params, next);
+    clearColorLimits(params);
   }
 
-  if (options.mode === "guest" && guest) {
+  if (options.mode === "guest") {
+    const guest = parseGuestUrlState(current);
     const filters = { ...guest.filters, ...pickFilters(patch) };
     const sort = { ...guest.sort, ...pickSort(patch) };
     let limit = patch.limit ?? guest.limit;
@@ -229,8 +316,8 @@ function buildParamsFromPatch(
       params.delete("limit");
     }
 
-    writeFiltersToParams(params, filters);
-    writeSortToParams(params, sort);
+    writeFiltersToParams(params, filters, "guest");
+    writeSortToParams(params, sort, "guest");
     if (limit > WINE_TABLE_PAGE_SIZE) params.set("limit", String(limit));
     else params.delete("limit");
   }
@@ -255,10 +342,6 @@ function pickSort(patch: UrlPatch): Partial<WineUrlSortFields> {
   if (patch.sortBy !== undefined) out.sortBy = patch.sortBy;
   if (patch.sortDir !== undefined) out.sortDir = patch.sortDir;
   return out;
-}
-
-function pickLimits(patch: UrlPatch): Partial<Record<WineColor, number>> {
-  return patch.limits ?? {};
 }
 
 export type HomeUrlState = ReturnType<typeof parseHomeUrlState>;
@@ -290,13 +373,33 @@ function useWineListUrlInner(mode: "home" | "guest") {
   );
 
   const resetFilters = useCallback(() => {
-    const params = new URLSearchParams();
-    if (mode === "home" && "tab" in state && state.tab === "drank") {
-      params.set("tab", "drank");
+    if (mode !== "home") {
+      const params = new URLSearchParams();
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+      return;
     }
+
+    const tab = parseTab(searchParams);
+    const collection = readTabState(searchParams, "collection");
+    const drank = readTabState(searchParams, "drank");
+    const cleared = emptyWineUrlFilters(tab);
+    const defaultSort = defaultSortForContext(tab);
+
+    const params = new URLSearchParams(searchParams.toString());
+    writeAllHomeTabState(params, {
+      tab,
+      collection:
+        tab === "collection"
+          ? { filters: cleared, sort: defaultSort }
+          : collection,
+      drank:
+        tab === "drank" ? { filters: cleared, sort: defaultSort } : drank,
+    });
+
     const qs = params.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  }, [mode, pathname, router, state]);
+  }, [mode, pathname, router, searchParams]);
 
   return { state, searchParams, replaceUrl, resetFilters };
 }

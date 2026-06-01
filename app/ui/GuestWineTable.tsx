@@ -1,6 +1,9 @@
 "use client";
 
-import type { GuestSelectionDraft } from "@/lib/guestSelection";
+import {
+  autoGlassPriceFromBottle,
+  type GuestSelectionDraft,
+} from "@/lib/guestSelection";
 import type { Wine } from "@/lib/wines";
 import {
   displayNotes,
@@ -11,9 +14,17 @@ import {
   formatWineYear,
 } from "@/lib/wines";
 import { countryCodeToFlagEmoji } from "@/lib/wineUtils";
+import { CountryTruncate, TruncateWithTooltip } from "./TruncateWithTooltip";
 import { WineMobileList } from "./WineMobileList";
+import {
+  useWineRowMouseLeaveHandler,
+  useWineTableMouseLeaveHandler,
+  WineTableTooltipProvider,
+} from "./WineTableTooltipContext";
 
-const cellBase = "min-w-0 break-words align-top text-center text-zinc-800";
+const ROW_H = "h-8 max-h-8";
+const rowCell = `${ROW_H} min-w-0 align-middle px-0.5 py-0 text-center text-zinc-800 sm:px-1`;
+const cellText = `${rowCell} text-zinc-700`;
 
 const COL_PCT_COLLECTION = [
   5.5, 10, 13, 3, 9, 8, 7, 6.5, 8.5, 6.5, 6, 6, 3.5, 7.5,
@@ -27,7 +38,7 @@ const COL_PCT_GUEST_SELECT = [
 ] as const;
 
 const inputClass =
-  "h-7 w-full max-w-[4.5rem] rounded border border-zinc-200 bg-white px-1 text-center text-[10px] text-zinc-900 sm:h-8 sm:max-w-[5rem] sm:text-[11px]";
+  "h-6 w-full max-w-[4.5rem] rounded border border-zinc-200 bg-white px-1 text-center text-[10px] text-zinc-900 sm:max-w-[5rem] sm:text-[11px]";
 
 function scaleCols(cols: readonly number[]) {
   const sum = cols.reduce((a, b) => a + b, 0);
@@ -66,6 +77,16 @@ type GuestSelectProps = BaseProps & {
 export type WineTableProps = CollectionProps | GuestProps | GuestSelectProps;
 
 export function GuestWineTable(props: WineTableProps) {
+  return (
+    <WineTableTooltipProvider>
+      <GuestWineTableContent {...props} />
+    </WineTableTooltipProvider>
+  );
+}
+
+function GuestWineTableContent(props: WineTableProps) {
+  const onRowLeave = useWineRowMouseLeaveHandler();
+  const onTableLeave = useWineTableMouseLeaveHandler();
   const { wines, variant = "collection" } = props;
   const showActions =
     variant !== "guest" && (props.showActions ?? true) && props.onToggleDrank;
@@ -109,6 +130,7 @@ export function GuestWineTable(props: WineTableProps) {
       {mobileList}
       <div className="hidden w-full min-w-0 md:block md:overflow-visible">
       <table
+        onMouseLeave={onTableLeave}
         className="w-full table-fixed border-collapse text-[11px] leading-snug sm:text-[12px]"
       >
         <colgroup>
@@ -117,7 +139,7 @@ export function GuestWineTable(props: WineTableProps) {
           ))}
         </colgroup>
         <thead className="bg-zinc-50 text-center text-[10px] font-semibold text-zinc-600 sm:text-[11px]">
-          <tr className="[&>th]:align-bottom [&>th]:px-1 [&>th]:py-1 sm:[&>th]:px-1.5 sm:[&>th]:py-1.5">
+          <tr className="[&>th]:align-bottom [&>th]:px-0.5 [&>th]:py-0.5 sm:[&>th]:px-1 sm:[&>th]:py-1">
             {variant === "guest" ? (
               <>
                 <th className="whitespace-normal">Название</th>
@@ -150,7 +172,12 @@ export function GuestWineTable(props: WineTableProps) {
                   <>
                     <th className="whitespace-nowrap px-0.5">Гости</th>
                     <th className="whitespace-nowrap px-1">Бут.</th>
-                    <th className="whitespace-nowrap px-1">Бок.</th>
+                    <th
+                      className="whitespace-nowrap px-1"
+                      title="Пусто — только бутылка. Иначе авто: бутылка ÷ 5 + 4"
+                    >
+                      Бок.
+                    </th>
                   </>
                 ) : null}
                 {showActions ? <th className="whitespace-nowrap"></th> : null}
@@ -169,56 +196,48 @@ export function GuestWineTable(props: WineTableProps) {
             const draft = guestSelect?.draft[w.id];
             const rowInvalid = invalidIds?.has(w.id);
 
+            const nameText = w.name?.trim() || "—";
+            const nameTip =
+              [nameText !== "—" ? nameText : null, extra].filter(Boolean).join("\n") ||
+              undefined;
+
             const nameCell = (
-              <td className={`${cellBase} font-medium text-zinc-900`}>
-                <div className="flex flex-col items-center justify-start gap-0.5">
-                  <div className="min-w-0 max-w-full break-words">{w.name || "—"}</div>
-                  {extra ? (
-                    <div className="max-w-full break-words text-[10px] font-normal leading-snug text-zinc-500 sm:text-[11px]">
-                      {extra}
-                    </div>
-                  ) : null}
-                </div>
+              <td className={`${rowCell} font-medium text-zinc-900`}>
+                <TruncateWithTooltip text={nameText} tooltip={nameTip} />
               </td>
             );
 
             const countryCell = (
-              <td className={`${cellBase} text-zinc-700`}>
-                <div className="flex w-full max-w-full flex-nowrap items-center justify-center gap-1 overflow-hidden">
-                  {flag ? (
-                    <span
-                      className="shrink-0 text-base leading-none sm:text-lg"
-                      title={w.countryCode ?? undefined}
-                      aria-hidden
-                    >
-                      {flag}
-                    </span>
-                  ) : null}
-                  <span className="max-w-[min(100%,7rem)] truncate text-center text-[10px] sm:max-w-[min(100%,8.5rem)] sm:text-[11px]">
-                    {countryLine}
-                  </span>
-                </div>
+              <td className={cellText}>
+                <CountryTruncate countryLine={countryLine} flag={flag} />
               </td>
             );
 
             if (variant === "guest") {
               return (
-                <tr
-                  key={w.id}
-                  className="[&>td]:align-top [&>td]:px-1 [&>td]:py-1 sm:[&>td]:px-1.5 sm:[&>td]:py-1.5"
-                >
+                <tr key={w.id} className={ROW_H} onMouseLeave={onRowLeave}>
                   {nameCell}
-                  <td className={`${cellBase} text-zinc-700`}>{w.producer || "—"}</td>
-                  <td className="text-center text-zinc-700">{formatWineYear(w.year)}</td>
+                  <td className={cellText}>
+                    <TruncateWithTooltip text={w.producer} />
+                  </td>
+                  <td className={`${rowCell} text-zinc-700`}>{formatWineYear(w.year)}</td>
                   {countryCell}
-                  <td className={`${cellBase} text-zinc-700`}>{w.region || "—"}</td>
-                  <td className={`${cellBase} text-zinc-600`}>{w.subregion || "—"}</td>
-                  <td className={`${cellBase} text-zinc-600`}>{w.grape || "—"}</td>
-                  <td className={cellBase}>{ratingsText || "—"}</td>
-                  <td className="whitespace-nowrap text-center font-medium text-zinc-900">
+                  <td className={cellText}>
+                    <TruncateWithTooltip text={w.region} />
+                  </td>
+                  <td className={`${rowCell} text-zinc-600`}>
+                    <TruncateWithTooltip text={w.subregion} />
+                  </td>
+                  <td className={`${rowCell} text-zinc-600`}>
+                    <TruncateWithTooltip text={w.grape} />
+                  </td>
+                  <td className={rowCell}>
+                    <TruncateWithTooltip text={ratingsText || undefined} />
+                  </td>
+                  <td className={`${rowCell} whitespace-nowrap font-medium text-zinc-900`}>
                     {formatTableAmount(w.guestBottlePrice)}
                   </td>
-                  <td className="whitespace-nowrap text-center text-zinc-800">
+                  <td className={`${rowCell} whitespace-nowrap text-zinc-800`}>
                     {formatTableAmount(w.guestGlassPrice)}
                   </td>
                 </tr>
@@ -228,59 +247,70 @@ export function GuestWineTable(props: WineTableProps) {
             return (
               <tr
                 key={w.id}
+                onMouseLeave={onRowLeave}
                 className={[
-                  "[&>td]:align-top [&>td]:px-1 [&>td]:py-1 sm:[&>td]:px-1.5 sm:[&>td]:py-1.5",
+                  ROW_H,
                   outOfStock && guestSelect ? "bg-zinc-50/80 opacity-60" : "",
                   rowInvalid ? "bg-red-50/60" : "",
                 ]
                   .filter(Boolean)
                   .join(" ")}
               >
-                <td className="whitespace-nowrap text-center text-zinc-600">
+                <td className={`${rowCell} whitespace-nowrap text-zinc-600`}>
                   {formatDateRU(w.purchaseDate)}
                 </td>
                 {nameCell}
-                <td className={`${cellBase} text-zinc-700`}>{w.producer || "—"}</td>
-                <td className="text-center text-zinc-700">{w.year ?? "—"}</td>
+                <td className={cellText}>
+                  <TruncateWithTooltip text={w.producer} />
+                </td>
+                <td className={`${rowCell} text-zinc-700`}>{w.year ?? "—"}</td>
                 {countryCell}
-                <td className={`${cellBase} text-zinc-700`}>{w.region || "—"}</td>
-                <td className={`${cellBase} text-zinc-600`}>{w.subregion || "—"}</td>
-                <td className={`${cellBase} text-zinc-600`}>{w.grape || "—"}</td>
-                <td className={cellBase}>{ratingsText || "—"}</td>
-                <td className="whitespace-nowrap text-center text-zinc-800">
+                <td className={cellText}>
+                  <TruncateWithTooltip text={w.region} />
+                </td>
+                <td className={`${rowCell} text-zinc-600`}>
+                  <TruncateWithTooltip text={w.subregion} />
+                </td>
+                <td className={`${rowCell} text-zinc-600`}>
+                  <TruncateWithTooltip text={w.grape} />
+                </td>
+                <td className={rowCell}>
+                  <TruncateWithTooltip text={ratingsText || undefined} />
+                </td>
+                <td className={`${rowCell} whitespace-nowrap text-zinc-800`}>
                   {formatAmountWithCurrency(w.purchasePrice, w.purchaseCurrency)}
                 </td>
-                <td className="whitespace-nowrap text-center text-zinc-800">
+                <td className={`${rowCell} whitespace-nowrap text-zinc-800`}>
                   {formatAmountWithCurrency(w.israelPrice, w.israelCurrency)}
                 </td>
-                <td className="whitespace-nowrap text-center text-zinc-800">
+                <td className={`${rowCell} whitespace-nowrap text-zinc-800`}>
                   {formatAmountWithCurrency(w.originPrice, w.originCurrency)}
                 </td>
-                <td className="text-center font-medium text-zinc-900">{w.quantity}</td>
+                <td className={`${rowCell} font-medium text-zinc-900`}>{w.quantity}</td>
 
                 {guestSelect ? (
                   outOfStock ? (
                     <>
-                      <td colSpan={3} className="text-center text-[10px] text-zinc-500 sm:text-[11px]">
+                      <td colSpan={3} className={`${rowCell} text-[10px] text-zinc-500 sm:text-[11px]`}>
                         Нет в наличии
                       </td>
                     </>
                   ) : (
                     <>
-                      <td className="align-top px-0.5">
-                        <div className="flex justify-center pt-0.5">
+                      <td className={rowCell}>
+                        <div className="flex h-full items-center justify-center">
                           <input
                             type="checkbox"
                             checked={draft?.selected ?? false}
                             onChange={(e) =>
                               guestSelect.onDraftChange(w.id, { selected: e.target.checked })
                             }
-                            className="size-3.5 rounded border-zinc-300 text-rose-700 focus:ring-rose-500 sm:size-4"
+                            className="size-3.5 rounded border-zinc-300 text-rose-700 focus:ring-rose-500"
                             aria-label={`Включить ${w.name} в гостевую карту`}
                           />
                         </div>
                       </td>
-                      <td className="align-top px-1">
+                      <td className={rowCell}>
                         <input
                           type="text"
                           inputMode="decimal"
@@ -290,6 +320,7 @@ export function GuestWineTable(props: WineTableProps) {
                           }
                           disabled={!(draft?.selected ?? false)}
                           placeholder="—"
+                          title={rowInvalid ? "Укажите цену" : undefined}
                           className={[
                             inputClass,
                             rowInvalid ? "border-red-400 bg-red-50" : "",
@@ -298,36 +329,52 @@ export function GuestWineTable(props: WineTableProps) {
                             .join(" ")}
                           aria-invalid={rowInvalid || undefined}
                         />
-                        {rowInvalid ? (
-                          <div className="mt-0.5 text-center text-[9px] text-red-600 sm:text-[10px]">
-                            Укажите цену
-                          </div>
-                        ) : null}
                       </td>
-                      <td className="align-top px-1">
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          value={draft?.glassPrice ?? ""}
-                          onChange={(e) =>
-                            guestSelect.onDraftChange(w.id, { glassPrice: e.target.value })
-                          }
-                          disabled={!(draft?.selected ?? false)}
-                          placeholder="—"
-                          className={inputClass}
-                        />
+                      <td className={rowCell}>
+                        <div className="flex flex-col items-center gap-0.5">
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={draft?.glassPrice ?? ""}
+                            onChange={(e) =>
+                              guestSelect.onDraftChange(w.id, { glassPrice: e.target.value })
+                            }
+                            disabled={!(draft?.selected ?? false)}
+                            placeholder={
+                              draft?.glassPriceManual ? "—" : "авто"
+                            }
+                            title="Очистите поле, если вино не разливают по бокалам"
+                            className={inputClass}
+                          />
+                          {draft?.glassPriceManual &&
+                          draft?.bottlePrice &&
+                          (draft?.selected ?? false) ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                guestSelect.onDraftChange(
+                                  w.id,
+                                  autoGlassPriceFromBottle(draft.bottlePrice),
+                                )
+                              }
+                              className="text-[9px] font-medium leading-none text-rose-700 hover:underline"
+                            >
+                              по формуле
+                            </button>
+                          ) : null}
+                        </div>
                       </td>
                     </>
                   )
                 ) : null}
 
                 {showActions && props.onToggleDrank ? (
-                  <td className="align-top">
-                    <div className="flex justify-center">
+                  <td className={rowCell}>
+                    <div className="flex h-full items-center justify-center">
                       <button
                         type="button"
                         onClick={() => void props.onToggleDrank!(w.id, !w.drank)}
-                        className="inline-flex items-center justify-center rounded px-0.5 py-0.5 text-[10px] font-semibold text-rose-700 hover:bg-rose-50 sm:px-1 sm:text-[11px]"
+                        className="inline-flex items-center justify-center rounded px-0.5 text-[10px] font-semibold text-rose-700 hover:bg-rose-50 sm:text-[11px]"
                       >
                         {w.drank ? "Вернуть" : "Выпить"}
                       </button>

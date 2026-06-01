@@ -1,5 +1,5 @@
 import type { Prisma } from "./generated/prisma/client";
-export const WINE_TABLE_PAGE_SIZE = 15;
+export const WINE_TABLE_PAGE_SIZE = 20;
 
 export const WINE_COLOR_ORDER = ["red", "white", "rose", "sparkling"] as const;
 export type WineColor = (typeof WINE_COLOR_ORDER)[number];
@@ -19,6 +19,9 @@ export type WineSortKey =
   | "guestBottlePrice"
   | "guestGlassPrice"
   | "vivinoRating"
+  | "collectionValue"
+  | "drankAt"
+  | "drankRating"
   | "name"
   | "year";
 
@@ -95,6 +98,9 @@ export function parseWineBrowseFilters(
     "guestBottlePrice",
     "guestGlassPrice",
     "vivinoRating",
+    "collectionValue",
+    "drankAt",
+    "drankRating",
     "name",
     "year",
   ];
@@ -207,9 +213,15 @@ export function buildWineBrowseWhere(
   }
 
   if (filters.ratingMin != null) {
-    and.push({
-      vivinoRating: { not: null, gte: filters.ratingMin },
-    });
+    if (filters.drank) {
+      and.push({
+        drankRating: { not: null, gte: filters.ratingMin },
+      });
+    } else {
+      and.push({
+        vivinoRating: { not: null, gte: filters.ratingMin },
+      });
+    }
   }
 
   if (and.length > 0) {
@@ -227,6 +239,7 @@ function nullableSort(
     | "guestBottlePrice"
     | "guestGlassPrice"
     | "vivinoRating"
+    | "drankRating"
     | "year",
   dir: "asc" | "desc",
 ): Prisma.WineOrderByWithRelationInput {
@@ -255,10 +268,16 @@ export function buildWineOrderBy(
       return [nullableSort("guestGlassPrice", dir), tie];
     case "vivinoRating":
       return [nullableSort("vivinoRating", dir), tie];
+    case "drankAt":
+      return [{ drankAt: { sort: dir, nulls: "last" } }, tie];
+    case "drankRating":
+      return [nullableSort("drankRating", dir), tie];
     case "year":
       return [nullableSort("year", dir), tie];
     case "name":
       return [{ name: dir }];
+    case "collectionValue":
+      return [nullableSort("israelPrice", dir), tie];
     default:
       return [
         nullableSort("purchasePrice", DEFAULT_WINE_SORT_DIR),
