@@ -432,10 +432,16 @@ function HomePageContent() {
               />
             </div>
 
-            <div className="space-y-6">
-              {isRefreshing && data ? (
-                <TableLoadingPanel />
-              ) : hasAnySection ? (
+            <div className="relative min-h-[calc(100dvh-14rem)] space-y-6">
+              {isRefreshing ? (
+                <div
+                  className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-zinc-50/75"
+                  aria-busy="true"
+                >
+                  <LoadingSpinner label="Загрузка…" />
+                </div>
+              ) : null}
+              {hasAnySection ? (
                 WINE_COLOR_ORDER.filter(
                   (color) => (data?.sections[color]?.total ?? 0) > 0,
                 ).map((color) => {
@@ -528,13 +534,9 @@ function HomePageContent() {
         copyFrom={addWineCopyFrom}
         onClose={closeAddWine}
         onSubmit={async (wine) => {
-          try {
-            await addWineApi({ ...wine, drank: false });
-            closeAddWine();
-            await refetch();
-          } catch (e) {
-            alert(e instanceof Error ? e.message : String(e));
-          }
+          await addWineApi({ ...wine, drank: false });
+          closeAddWine();
+          await refetch();
         }}
       />
 

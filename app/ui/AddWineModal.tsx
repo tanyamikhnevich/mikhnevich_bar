@@ -15,6 +15,7 @@ import {
 } from "@/lib/wineNormalize";
 import { wineToAddFormDefaults } from "@/lib/wineAddTemplate";
 import {
+  getWineYearInputError,
   parseVintageFromFormInput,
   WINE_VINTAGE_NV,
 } from "@/lib/wineVintage";
@@ -175,10 +176,8 @@ function validateForm(
 ): string | null {
   if (!form.name.trim()) return "Укажите название";
   if (!form.producer.trim()) return "Укажите производителя";
-  if (!form.year.trim()) return "Укажите год или N.V.";
-  if (parseVintageFromFormInput(form.year) == null) {
-    return `Год: число 1800–2100 или ${WINE_VINTAGE_NV} (нет винтажа)`;
-  }
+  const yearError = getWineYearInputError(form.year);
+  if (yearError) return yearError;
   if (!form.countrySelect) return "Выберите страну";
   if (form.countrySelect === WINE_COUNTRY_OTHER_VALUE && !form.countryOther.trim()) {
     return "Укажите название страны";
@@ -219,6 +218,9 @@ export function AddWineModal({
   const [regionOptions, setRegionOptions] = useState<string[]>([]);
   const [regionsLoading, setRegionsLoading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [yearTouched, setYearTouched] = useState(false);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
 
   const canonicalCountries = useMemo(() => getCanonicalCountries(), []);
 
@@ -246,7 +248,14 @@ export function AddWineModal({
     [form, resolvedCountry, resolvedRegion],
   );
 
-  const canSubmit = validationError == null;
+  const yearError = useMemo(() => getWineYearInputError(form.year), [form.year]);
+  const showYearError = yearTouched || submitAttempted;
+  const nonYearValidationError = useMemo(() => {
+    if (!validationError || validationError === yearError) return null;
+    return validationError;
+  }, [validationError, yearError]);
+
+  const canSubmit = validationError == null && !submitting;
 
   useEffect(() => {
     if (!open) return;
@@ -258,6 +267,9 @@ export function AddWineModal({
       }
       setRegionOptions([]);
       setSubmitError(null);
+      setSubmitting(false);
+      setYearTouched(false);
+      setSubmitAttempted(false);
     });
     void fetch("/api/wines/facets?drank=false", { cache: "no-store" })
       .then((r) => r.json())
@@ -361,11 +373,10 @@ export function AddWineModal({
           className="flex min-h-0 flex-1 flex-col"
           onSubmit={(e) => {
             e.preventDefault();
+            setSubmitAttempted(true);
             const err = validateForm(form, resolvedCountry, resolvedRegion);
-            if (err) {
-              setSubmitError(err);
-              return;
-            }
+            if (err) return;
+            if (submitting) return;
 
             const purchaseCurrency = resolveWineCurrencySymbol(
               form.purchaseCurrencyKey,
@@ -380,34 +391,44 @@ export function AddWineModal({
               ? parsePositivePrice(form.israelPrice)
               : null;
 
-            void onSubmit({
-              name: form.name.trim(),
-              producer: form.producer.trim(),
-              year: parseVintageFromFormInput(form.year),
-              country: resolvedCountry,
-              countryCode: isCountryOther
-                ? ""
-                : canonicalCountryCode(form.countrySelect) ?? "",
-              region: resolvedRegion,
-              subregion: form.subregion.trim() || "",
-              grape: form.grape.trim() || "",
-              ratings,
-              purchasePrice: parsePositivePrice(form.purchasePrice),
-              purchaseCurrency,
-              originPrice: parsePositivePrice(form.originPrice),
-              originCurrency,
-              israelPrice,
-              israelCurrency: israelPrice != null ? "₪" : null,
-              isGuestVisible: false,
-              guestBottlePrice: null,
-              guestGlassPrice: null,
-              purchaseDate: form.purchaseDate.trim() || null,
-              vivinoRating: null,
-              quantity: parsePositiveInt(form.quantity) ?? 1,
-              color: form.color,
-              drank: false,
-              notes: form.notes.trim() || null,
-            });
+            setSubmitting(true);
+            setSubmitError(null);
+            void Promise.resolve(
+              onSubmit({
+                name: form.name.trim(),
+                producer: form.producer.trim(),
+                year: parseVintageFromFormInput(form.year),
+                country: resolvedCountry,
+                countryCode: isCountryOther
+                  ? ""
+                  : canonicalCountryCode(form.countrySelect) ?? "",
+                region: resolvedRegion,
+                subregion: form.subregion.trim() || "",
+                grape: form.grape.trim() || "",
+                ratings,
+                purchasePrice: parsePositivePrice(form.purchasePrice),
+                purchaseCurrency,
+                originPrice: parsePositivePrice(form.originPrice),
+                originCurrency,
+                israelPrice,
+                israelCurrency: israelPrice != null ? "₪" : null,
+                isGuestVisible: false,
+                guestBottlePrice: null,
+                guestGlassPrice: null,
+                purchaseDate: form.purchaseDate.trim() || null,
+                vivinoRating: null,
+                quantity: parsePositiveInt(form.quantity) ?? 1,
+                color: form.color,
+                drank: false,
+                notes: form.notes.trim() || null,
+              }),
+            )
+              .catch((ex: unknown) => {
+                setSubmitError(ex instanceof Error ? ex.message : String(ex));
+              })
+              .finally(() => {
+                setSubmitting(false);
+              });
           }}
         >
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 sm:px-6">
@@ -439,11 +460,49 @@ export function AddWineModal({
               </Field>
 
               <Field label="Год" required>
-                <TextInput
-                  value={form.year}
-                  onChange={(e) => patch({ year: e.target.value })}
-                  placeholder={`2021 или ${WINE_VINTAGE_NV}`}
-                />
+                <div className="flex gap-2">
+                  <TextInput
+                    className={[
+                      "min-w-0 flex-1",
+                      showYearError && yearError
+                        ? "border-rose-300 focus:border-rose-400 focus:ring-rose-100"
+                        : "",
+                    ].join(" ")}
+                    value={form.year === WINE_VINTAGE_NV ? "" : form.year}
+                    onChange={(e) => {
+                      const digits = e.target.value.replace(/\D/g, "").slice(0, 4);
+                      patch({ year: digits });
+                    }}
+                    onBlur={() => setYearTouched(true)}
+                    placeholder="2021"
+                    inputMode="numeric"
+                    disabled={form.year === WINE_VINTAGE_NV || submitting}
+                    aria-invalid={showYearError && yearError != null}
+                  />
+                  <button
+                    type="button"
+                    disabled={submitting}
+                    onClick={() => {
+                      setYearTouched(true);
+                      patch({
+                        year: form.year === WINE_VINTAGE_NV ? "" : WINE_VINTAGE_NV,
+                      });
+                    }}
+                    className={[
+                      "shrink-0 rounded-lg border px-3 text-sm font-semibold transition-colors",
+                      form.year === WINE_VINTAGE_NV
+                        ? "border-rose-300 bg-rose-50 text-rose-800"
+                        : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50",
+                      submitting ? "cursor-not-allowed opacity-60" : "",
+                    ].join(" ")}
+                    title="Нет винтажа (No Vintage)"
+                  >
+                    {WINE_VINTAGE_NV}
+                  </button>
+                </div>
+                {showYearError && yearError ? (
+                  <p className="mt-1 text-xs text-rose-700">{yearError}</p>
+                ) : null}
               </Field>
 
               <Field label="Страна" required>
@@ -623,16 +682,17 @@ export function AddWineModal({
           </div>
 
           <div className="shrink-0 border-t border-zinc-200 px-5 py-4 sm:px-6">
-            {submitError || validationError ? (
+            {submitError || (submitAttempted && nonYearValidationError) ? (
               <p className="mb-3 text-sm text-rose-700">
-                {submitError ?? validationError}
+                {submitError ?? nonYearValidationError}
               </p>
             ) : null}
             <div className="flex items-center justify-end gap-3">
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50"
+                disabled={submitting}
+                className="rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Отмена
               </button>
@@ -640,13 +700,23 @@ export function AddWineModal({
                 type="submit"
                 disabled={!canSubmit}
                 className={[
-                  "rounded-lg px-4 py-2 text-sm font-semibold text-white",
+                  "inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white",
                   canSubmit
                     ? "bg-rose-700 hover:bg-rose-800"
                     : "cursor-not-allowed bg-zinc-300",
                 ].join(" ")}
               >
-                Добавить
+                {submitting ? (
+                  <>
+                    <span
+                      className="inline-block size-4 animate-spin rounded-full border-2 border-white/40 border-t-white"
+                      aria-hidden
+                    />
+                    Добавление…
+                  </>
+                ) : (
+                  "Добавить"
+                )}
               </button>
             </div>
           </div>
