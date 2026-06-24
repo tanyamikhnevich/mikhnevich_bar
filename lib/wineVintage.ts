@@ -48,6 +48,15 @@ export function parseVintageFromFormInput(raw: string): string | null {
   return normalizeWineVintage(raw) ?? null;
 }
 
+/** Сообщение об ошибке для поля «год» в форме; null — ок. */
+export function getWineYearInputError(raw: string): string | null {
+  if (!raw.trim()) return "Укажите год или нажмите N.V.";
+  if (parseVintageFromFormInput(raw) == null) {
+    return `Число 1800–2100 или ${WINE_VINTAGE_NV}`;
+  }
+  return null;
+}
+
 /** Отображение в таблице: N.V. как есть; пустое — «—». */
 export function formatWineYear(year: string | number | null | undefined): string {
   if (year === null || year === undefined) return "—";
