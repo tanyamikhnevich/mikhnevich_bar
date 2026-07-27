@@ -12,6 +12,7 @@ export function wineDuplicateCreateData(
   },
 ) {
   return {
+    userId: w.userId,
     name: w.name,
     producer: w.producer,
     year: w.year,
@@ -44,6 +45,7 @@ export function wineDuplicateCreateData(
 
 export function wineIdentityWhere(w: Wine) {
   return {
+    userId: w.userId,
     name: w.name,
     producer: w.producer,
     year: w.year,

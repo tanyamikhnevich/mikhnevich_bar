@@ -8,7 +8,10 @@
     "start": "next start",
     "lint": "eslint",
     "import:wines": "tsx scripts/import-my-wines-xlsx.ts",
-    "build:drank-meta": "tsx scripts/build-drank-excel-meta.ts"
+    "build:drank-meta": "tsx scripts/build-drank-excel-meta.ts",
+    "create:user": "tsx scripts/create-user.ts",
+    "assign:wines": "tsx scripts/assign-wines.ts",
+    "copy:wines": "tsx scripts/copy-wines.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

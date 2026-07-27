@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { Prisma } from "../../../../lib/generated/prisma/client";
 import { prisma } from "../../../../lib/prisma";
+import { requireApiSession } from "../../../../lib/auth/dal";
 import { toWineJson } from "../../../../lib/mapWineJson";
 import {
   fetchCountryFacetOptions,
@@ -32,6 +33,9 @@ function resolveCountryKeys(
 }
 
 export async function GET(req: Request) {
+  const auth = await requireApiSession();
+  if ("response" in auth) return auth.response;
+
   const url = new URL(req.url);
   const filters = parseWineBrowseFilters(url.searchParams);
   const flat = url.searchParams.get("flat") === "1";
@@ -53,12 +57,14 @@ export async function GET(req: Request) {
     return sorted.slice(skip, skip + limit);
   }
 
-  const countryOptions = await fetchCountryFacetOptions(filters.drank);
+  const userId = auth.session.userId;
+
+  const countryOptions = await fetchCountryFacetOptions(userId, filters.drank);
   const countryKeys = resolveCountryKeys(filters.countryKeys, countryOptions);
 
   const singleCountry = countryKeys.length === 1 ? countryKeys[0] : "";
   const regionOptionsRaw = singleCountry
-    ? await fetchRegionFacetOptions(filters.drank, singleCountry)
+    ? await fetchRegionFacetOptions(userId, filters.drank, singleCountry)
     : [];
 
   const regionKey =
@@ -67,11 +73,11 @@ export async function GET(req: Request) {
       : "";
 
   const filtersResolved = { ...filters, countryKeys, regionKey };
-  const totals = await fetchWineTotals();
+  const totals = await fetchWineTotals(userId);
 
   if (flat) {
     const { limit, offset } = parseFlatPagination(url.searchParams);
-    const where = buildWineBrowseWhere(filtersResolved);
+    const where = buildWineBrowseWhere(filtersResolved, userId);
     const [items, total] = await Promise.all([
       fetchSortedRows(where, limit, offset),
       prisma.wine.count({ where }),
@@ -105,7 +111,7 @@ export async function GET(req: Request) {
   await Promise.all(
     WINE_COLOR_ORDER.map(async (color) => {
       const limit = colorLimits[color] ?? WINE_TABLE_PAGE_SIZE;
-      const where = buildWineBrowseWhere(filtersResolved, color);
+      const where = buildWineBrowseWhere(filtersResolved, userId, color);
       const [rows, total] = await Promise.all([
         fetchSortedRows(where, limit),
         prisma.wine.count({ where }),

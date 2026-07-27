@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireApiSession } from "@/lib/auth/dal";
 import { toWineJson } from "@/lib/mapWineJson";
 import { parseVivinoFromRatings } from "@/lib/wineUtils";
 import { normalizeWineGeo } from "@/lib/wineNormalize";
@@ -7,7 +8,11 @@ import { normalizeWineVintage } from "@/lib/wineVintage";
 
 /** Полный список (без фильтров). Для UI используйте GET /api/wines/browse. */
 export async function GET() {
+  const auth = await requireApiSession();
+  if ("response" in auth) return auth.response;
+
   const wines = await prisma.wine.findMany({
+    where: { userId: auth.session.userId },
     orderBy: [
       { drank: "asc" },
       { color: "asc" },
@@ -20,6 +25,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const auth = await requireApiSession();
+  if ("response" in auth) return auth.response;
+
   const body = (await req.json()) as Record<string, unknown>;
 
   const name = typeof body.name === "string" ? body.name.trim() : "";
@@ -85,6 +93,7 @@ export async function POST(req: Request) {
 
   const created = await prisma.wine.create({
     data: {
+      userId: auth.session.userId,
       name,
       producer,
       year,

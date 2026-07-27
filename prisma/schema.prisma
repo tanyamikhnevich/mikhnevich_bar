@@ -19,8 +19,24 @@ enum WineColor {
   sparkling
 }
 
+/// Пользователь (владелец коллекции). Сейчас логинимся одним аккаунтом;
+/// в будущем к этой же таблице добавим регистрацию и привяжем вина к userId.
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  wines Wine[]
+}
+
 model Wine {
   id           String    @id @default(cuid())
+  // Владелец вина. Пока nullable — чтобы существующие вина мигрировали без потерь;
+  // после привязки старых вин (scripts/assign-wines.ts) в коде всегда проставляется.
+  userId       String?
+  user         User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
   name         String
   producer     String
   year         String?
@@ -55,6 +71,7 @@ model Wine {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([drank, color, createdAt])
+  @@index([userId])
+  @@index([userId, drank, color, createdAt])
   @@index([drank, drankAt])
 }

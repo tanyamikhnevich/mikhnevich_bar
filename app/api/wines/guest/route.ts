@@ -5,16 +5,24 @@ import {
   type GuestWineUpdate,
   validateGuestWineUpdates,
 } from "../../../../lib/guestWineApi";
+import { requireApiSession } from "../../../../lib/auth/dal";
 
-const guestListWhere = {
-  isGuestVisible: true,
-  quantity: { gt: 0 },
-  drank: false,
-} as const;
+/** Гостевой список конкретного пользователя. */
+function guestListWhere(userId: string) {
+  return {
+    userId,
+    isGuestVisible: true,
+    quantity: { gt: 0 },
+    drank: false,
+  };
+}
 
 export async function GET() {
+  const auth = await requireApiSession();
+  if ("response" in auth) return auth.response;
+
   const wines = await prisma.wine.findMany({
-    where: guestListWhere,
+    where: guestListWhere(auth.session.userId),
     orderBy: [{ color: "asc" }, { createdAt: "desc" }],
   });
 
@@ -50,6 +58,9 @@ function parseItems(body: unknown): GuestWineUpdate[] | null {
 }
 
 export async function PUT(req: Request) {
+  const auth = await requireApiSession();
+  if ("response" in auth) return auth.response;
+
   const items = parseItems(await req.json());
   if (!items) {
     return NextResponse.json({ error: "Нужен массив items" }, { status: 400 });
@@ -63,9 +74,11 @@ export async function PUT(req: Request) {
     );
   }
 
+  const userId = auth.session.userId;
   const ids = [...new Set(items.map((i) => i.id))];
+  // Только вина текущего пользователя — чужие id сюда не пройдут.
   const existing = await prisma.wine.findMany({
-    where: { id: { in: ids } },
+    where: { id: { in: ids }, userId },
     select: { id: true, quantity: true },
   });
   const qtyById = new Map(existing.map((w) => [w.id, w.quantity]));
@@ -76,7 +89,7 @@ export async function PUT(req: Request) {
 
   if (items.length === 0) {
     const wines = await prisma.wine.findMany({
-      where: guestListWhere,
+      where: guestListWhere(userId),
       orderBy: [{ color: "asc" }, { createdAt: "desc" }],
     });
     return NextResponse.json({ ok: true, guestCount: wines.length });
@@ -102,7 +115,7 @@ export async function PUT(req: Request) {
   }
 
   const wines = await prisma.wine.findMany({
-    where: guestListWhere,
+    where: guestListWhere(userId),
     orderBy: [{ color: "asc" }, { createdAt: "desc" }],
   });
 

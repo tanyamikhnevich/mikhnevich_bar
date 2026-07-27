@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { Prisma } from "../../../../lib/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import { requireApiSession } from "@/lib/auth/dal";
 import { toWineJson } from "@/lib/mapWineJson";
 import { normalizeWineGeo, normalizeWineText } from "@/lib/wineNormalize";
 import { normalizeWineVintage } from "@/lib/wineVintage";
@@ -11,7 +12,20 @@ export async function PATCH(
   req: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
+  const auth = await requireApiSession();
+  if ("response" in auth) return auth.response;
+
   const { id } = await ctx.params;
+
+  // Вино должно принадлежать текущему пользователю.
+  const owned = await prisma.wine.findFirst({
+    where: { id, userId: auth.session.userId },
+    select: { id: true },
+  });
+  if (!owned) {
+    return NextResponse.json({ error: "Не найдено" }, { status: 404 });
+  }
+
   const body = (await req.json()) as Record<string, unknown>;
 
   const data: Record<string, unknown> = {};
@@ -196,12 +210,16 @@ export async function DELETE(
   _req: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
+  const auth = await requireApiSession();
+  if ("response" in auth) return auth.response;
+
   const { id } = await ctx.params;
 
-  try {
-    await prisma.wine.delete({ where: { id } });
-    return NextResponse.json({ ok: true });
-  } catch {
+  const { count } = await prisma.wine.deleteMany({
+    where: { id, userId: auth.session.userId },
+  });
+  if (count === 0) {
     return NextResponse.json({ error: "Не найдено" }, { status: 404 });
   }
+  return NextResponse.json({ ok: true });
 }

@@ -1,0 +1,756 @@
+openapi: 3.1.0
+info:
+  title: Mikhnevich Bar API
+  version: 1.0.0
+  description: >
+    REST API винной коллекции. Одна сущность — Wine (вино).
+    Тот же бэкенд обслуживает и веб-сайт, и iOS-приложение.
+
+    База данных: PostgreSQL (Neon). Бэкенд: Next.js Route Handlers.
+
+    Все даты приходят в ISO-формате (UTC). `purchaseDate` — только дата (YYYY-MM-DD),
+    `drankAt` / `createdAt` / `updatedAt` — дата-время (ISO 8601).
+
+    АВТОРИЗАЦИЯ: все эндпоинты (кроме POST /api/auth/login) требуют входа.
+    Каждый пользователь видит и меняет только СВОИ вина; гостевая карта тоже
+    приватная. Два способа передать сессию:
+      - Веб-сайт: httpOnly-cookie `session` (ставится автоматически после входа).
+      - Приложение: заголовок `Authorization: Bearer <token>`, где token получен
+        из POST /api/auth/login.
+
+security:
+  - bearerAuth: []
+  - cookieAuth: []
+
+servers:
+  - url: http://localhost:3000
+    description: Локальная разработка
+  - url: https://ЗАМЕНИТЬ-НА-ПРОДАКШН-ДОМЕН
+    description: Продакшн (укажите домен деплоя, например на Vercel)
+
+tags:
+  - name: Auth
+    description: Вход и получение токена
+  - name: Wines
+    description: Операции с винами
+  - name: Guest
+    description: Гостевое меню (то, что видят гости бара)
+  - name: Facets
+    description: Справочники для фильтров (страны, регионы)
+
+paths:
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Вход и получение токена (для приложения)
+      description: >
+        Публичный эндпоинт. Проверяет email/пароль и возвращает Bearer-токен.
+        Токен затем отправляйте в каждом запросе:
+        `Authorization: Bearer <token>`. Аккаунт создаётся на бэкенде командой
+        `npm run create:user`.
+      security: [] # публичный — вход не требует токена
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+              required: [email, password]
+      responses:
+        "200":
+          description: Успешный вход
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    description: Bearer-токен (подписанный, со сроком действия)
+                  tokenType:
+                    type: string
+                    example: Bearer
+                  expiresAt:
+                    type: string
+                    format: date-time
+                    description: Когда токен истекает (по умолчанию через 7 дней)
+                  user:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      email: { type: string }
+                    required: [id, email]
+                required: [token, tokenType, expiresAt, user]
+        "400":
+          description: Не переданы email или password
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Неверный email или пароль
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/wines:
+    get:
+      tags: [Wines]
+      summary: Полный список вин (без фильтров)
+      description: >
+        Возвращает все вина. Для UI с фильтрами и постраничной загрузкой
+        используйте GET /api/wines/browse.
+      responses:
+        "200":
+          description: Массив вин
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Wine"
+    post:
+      tags: [Wines]
+      summary: Добавить вино
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WineCreate"
+      responses:
+        "201":
+          description: Вино создано
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Wine"
+        "400":
+          description: Не переданы обязательные поля name / producer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/wines/browse:
+    get:
+      tags: [Wines]
+      summary: Список вин с фильтрами, сортировкой и пагинацией
+      description: >
+        Основной эндпоинт для UI. По умолчанию отдаёт вина сгруппированными по цвету
+        (`sections`). Если передать `flat=1` — отдаёт плоский список с `total/limit/offset`.
+      parameters:
+        - name: drank
+          in: query
+          description: "true — раздел «Выпито», иначе активная коллекция"
+          schema: { type: boolean, default: false }
+        - name: flat
+          in: query
+          description: "1 — плоский список вместо группировки по цвету"
+          schema: { type: string, enum: ["1"] }
+        - name: name
+          in: query
+          description: Поиск по названию или производителю (регистронезависимо)
+          schema: { type: string }
+        - name: country
+          in: query
+          description: >
+            Фильтр по стране. Можно повторять параметр (?country=France&country=Italy)
+            или передать через запятую.
+          schema: { type: string }
+        - name: region
+          in: query
+          description: Фильтр по региону (работает, только если выбрана ровно одна страна)
+          schema: { type: string }
+        - name: priceField
+          in: query
+          description: По какому ценовому полю фильтровать диапазон цен
+          schema:
+            type: string
+            enum: [purchase, israel, origin, guestBottle, guestGlass]
+            default: purchase
+        - name: priceMin
+          in: query
+          schema: { type: number }
+        - name: priceMax
+          in: query
+          schema: { type: number }
+        - name: ratingMin
+          in: query
+          description: >
+            Минимальный рейтинг. Для активной коллекции — по vivinoRating,
+            для раздела «Выпито» — по drankRating.
+          schema: { type: number }
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum:
+              - purchaseDate
+              - purchasePrice
+              - israelPrice
+              - originPrice
+              - guestBottlePrice
+              - guestGlassPrice
+              - vivinoRating
+              - collectionValue
+              - drankAt
+              - drankRating
+              - name
+              - year
+            default: purchasePrice
+        - name: sortDir
+          in: query
+          schema: { type: string, enum: [asc, desc], default: desc }
+        - name: limit
+          in: query
+          description: "Только при flat=1. Размер страницы (1–500, по умолчанию 20)"
+          schema: { type: integer, minimum: 1, maximum: 500, default: 20 }
+        - name: offset
+          in: query
+          description: "Только при flat=1. Смещение"
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: redLimit
+          in: query
+          description: "Кол-во красных вин в секции (режим группировки). Аналогично whiteLimit, roseLimit, sparklingLimit"
+          schema: { type: integer, minimum: 1, maximum: 500 }
+        - name: whiteLimit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500 }
+        - name: roseLimit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500 }
+        - name: sparklingLimit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500 }
+      responses:
+        "200":
+          description: Результат в режиме секций или плоском режиме (flat=1)
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/BrowseSectionsResponse"
+                  - $ref: "#/components/schemas/BrowseFlatResponse"
+
+  /api/wines/facets:
+    get:
+      tags: [Facets]
+      summary: Справочник стран и регионов для фильтров
+      parameters:
+        - name: drank
+          in: query
+          description: "true — считать по разделу «Выпито»"
+          schema: { type: boolean, default: false }
+        - name: country
+          in: query
+          description: Если передать страну — вернутся её регионы
+          schema: { type: string }
+      responses:
+        "200":
+          description: Списки стран и регионов
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  countries:
+                    type: array
+                    items: { type: string }
+                  regions:
+                    type: array
+                    items: { type: string }
+                required: [countries, regions]
+
+  /api/wines/guest:
+    get:
+      tags: [Guest]
+      summary: Гостевое меню (приватное, только владелец)
+      description: >
+        Вина текущего пользователя, помеченные isGuestVisible=true, с quantity>0
+        и не выпитые. Требует входа: список видит только владелец коллекции.
+      responses:
+        "200":
+          description: Массив вин, видимых гостям
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Wine"
+    put:
+      tags: [Guest]
+      summary: Массово обновить гостевую видимость и цены
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      isGuestVisible: { type: boolean }
+                      guestBottlePrice:
+                        type: [integer, "null"]
+                        description: Цена за бутылку для гостей
+                      guestGlassPrice:
+                        type: [integer, "null"]
+                        description: Цена за бокал для гостей
+                    required: [id]
+              required: [items]
+      responses:
+        "200":
+          description: Успешно обновлено
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  guestCount:
+                    type: integer
+                    description: Сколько вин осталось в гостевом меню
+        "400":
+          description: Некорректное тело или невалидные цены
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Некоторые вина не найдены
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/wines/{id}:
+    patch:
+      tags: [Wines]
+      summary: Частично обновить вино
+      description: >
+        Передавайте только те поля, которые нужно изменить. Пустое тело даёт 400.
+      parameters:
+        - $ref: "#/components/parameters/WineId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WineUpdate"
+      responses:
+        "200":
+          description: Обновлённое вино
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Wine"
+        "400":
+          description: Пустое тело или невалидные данные (например, drankRating вне 0–10)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Вино не найдено
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      tags: [Wines]
+      summary: Удалить вино
+      parameters:
+        - $ref: "#/components/parameters/WineId"
+      responses:
+        "200":
+          description: Удалено
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+        "404":
+          description: Вино не найдено
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/wines/{id}/drink:
+    post:
+      tags: [Wines]
+      summary: Отметить вино выпитым (полностью или частично)
+      description: >
+        Если quantity равно всему остатку — вино целиком переходит в «Выпито» (mode=moved).
+        Если меньше — коллекция уменьшается, а на выпитое количество создаётся отдельная
+        запись (mode=split).
+      parameters:
+        - $ref: "#/components/parameters/WineId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                quantity:
+                  type: integer
+                  minimum: 1
+                  default: 1
+                  description: Сколько бутылок выпито
+                drankRating:
+                  type: [number, "null"]
+                  minimum: 0
+                  maximum: 10
+                  description: Оценка после дегустации (0–10)
+                drankNotes:
+                  type: [string, "null"]
+                  description: Заметки о дегустации
+      responses:
+        "200":
+          description: Готово
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  active:
+                    $ref: "#/components/schemas/Wine"
+                  drank:
+                    $ref: "#/components/schemas/Wine"
+                  mode:
+                    type: string
+                    enum: [moved, split]
+        "400":
+          description: Некорректное количество или вино уже выпито
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Вино не найдено
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/wines/{id}/restore:
+    post:
+      tags: [Wines]
+      summary: Вернуть вино из «Выпито» в коллекцию
+      description: >
+        Если в коллекции уже есть такое же вино — количества суммируются (mode=merged),
+        иначе запись просто возвращается в активные (mode=restored).
+      parameters:
+        - $ref: "#/components/parameters/WineId"
+      responses:
+        "200":
+          description: Возвращено
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  active:
+                    $ref: "#/components/schemas/Wine"
+                  mode:
+                    type: string
+                    enum: [merged, restored]
+        "400":
+          description: Вино не находится в разделе «Выпито»
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Вино не найдено
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: "Токен из POST /api/auth/login. Заголовок: Authorization: Bearer <token>"
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: session
+      description: httpOnly-cookie сессии (используется веб-сайтом автоматически)
+
+  parameters:
+    WineId:
+      name: id
+      in: path
+      required: true
+      description: Идентификатор вина (cuid)
+      schema: { type: string }
+
+  schemas:
+    WineColor:
+      type: string
+      enum: [red, white, rose, sparkling]
+      description: "Цвет вина: red — красное, white — белое, rose — розовое, sparkling — игристое"
+
+    Wine:
+      type: object
+      description: Вино — так, как оно возвращается из API.
+      properties:
+        id: { type: string }
+        name: { type: string }
+        producer: { type: string }
+        year:
+          type: [string, "null"]
+          description: Винтаж (год) строкой
+        country: { type: [string, "null"] }
+        countryCode:
+          type: [string, "null"]
+          description: ISO-код страны
+        region: { type: [string, "null"] }
+        subregion: { type: [string, "null"] }
+        grape:
+          type: [string, "null"]
+          description: Сорт винограда
+        ratings:
+          type: [string, "null"]
+          description: Сырая строка рейтингов (например, из Vivino)
+        purchasePrice: { type: [integer, "null"] }
+        purchaseCurrency: { type: [string, "null"] }
+        originPrice:
+          type: [integer, "null"]
+          description: Цена на родине
+        originCurrency: { type: [string, "null"] }
+        israelPrice:
+          type: [integer, "null"]
+          description: Цена в Израиле
+        israelCurrency: { type: [string, "null"] }
+        isGuestVisible:
+          type: boolean
+          description: Показывать ли вино в гостевом меню
+        guestBottlePrice:
+          type: [integer, "null"]
+          description: Цена за бутылку для гостей
+        guestGlassPrice:
+          type: [integer, "null"]
+          description: Цена за бокал для гостей
+        purchaseDate:
+          type: [string, "null"]
+          format: date
+          description: Дата покупки (YYYY-MM-DD)
+        vivinoRating:
+          type: [number, "null"]
+          description: Рейтинг Vivino
+        quantity:
+          type: integer
+          description: Количество бутылок в коллекции
+        color:
+          $ref: "#/components/schemas/WineColor"
+        drank:
+          type: boolean
+          description: Находится ли в разделе «Выпито»
+        drankAt:
+          type: [string, "null"]
+          format: date-time
+          description: Когда выпито
+        drankRating:
+          type: [number, "null"]
+          description: Оценка после дегустации (0–10)
+        drankNotes: { type: [string, "null"] }
+        notes: { type: [string, "null"] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+      required:
+        - id
+        - name
+        - producer
+        - isGuestVisible
+        - quantity
+        - color
+        - drank
+        - createdAt
+        - updatedAt
+
+    WineCreate:
+      type: object
+      description: Тело для создания вина. Обязательны только name и producer.
+      properties:
+        name: { type: string }
+        producer: { type: string }
+        year: { type: [string, "null"] }
+        country: { type: [string, "null"] }
+        countryCode: { type: [string, "null"] }
+        region: { type: [string, "null"] }
+        subregion: { type: [string, "null"] }
+        grape: { type: [string, "null"] }
+        ratings: { type: [string, "null"] }
+        vivinoRating:
+          type: [number, "null"]
+          description: Если не передать — попытается извлечься из ratings
+        purchasePrice: { type: [integer, "null"] }
+        purchaseCurrency: { type: [string, "null"] }
+        originPrice: { type: [integer, "null"] }
+        originCurrency: { type: [string, "null"] }
+        israelPrice: { type: [integer, "null"] }
+        israelCurrency: { type: [string, "null"] }
+        isGuestVisible: { type: boolean, default: false }
+        guestBottlePrice: { type: [integer, "null"] }
+        guestGlassPrice: { type: [integer, "null"] }
+        purchaseDate: { type: [string, "null"], format: date }
+        quantity:
+          type: integer
+          minimum: 1
+          maximum: 999
+          default: 1
+        color:
+          $ref: "#/components/schemas/WineColor"
+        drank: { type: boolean, default: false }
+        notes: { type: [string, "null"] }
+      required: [name, producer]
+
+    WineUpdate:
+      type: object
+      description: >
+        Частичное обновление. Любое из полей WineCreate плюс поля дегустации.
+        Передавайте только изменяемые поля.
+      properties:
+        name: { type: string }
+        producer: { type: string }
+        year: { type: [string, "null"] }
+        country: { type: [string, "null"] }
+        countryCode: { type: [string, "null"] }
+        region: { type: [string, "null"] }
+        subregion: { type: [string, "null"] }
+        grape: { type: [string, "null"] }
+        ratings: { type: [string, "null"] }
+        vivinoRating: { type: [number, "null"] }
+        purchasePrice: { type: [integer, "null"] }
+        purchaseCurrency: { type: [string, "null"] }
+        originPrice: { type: [integer, "null"] }
+        originCurrency: { type: [string, "null"] }
+        israelPrice: { type: [integer, "null"] }
+        israelCurrency: { type: [string, "null"] }
+        isGuestVisible: { type: boolean }
+        guestBottlePrice: { type: [integer, "null"] }
+        guestGlassPrice: { type: [integer, "null"] }
+        purchaseDate: { type: [string, "null"], format: date }
+        quantity: { type: integer, minimum: 1, maximum: 999 }
+        color:
+          $ref: "#/components/schemas/WineColor"
+        drank: { type: boolean }
+        drankRating:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 10
+        drankNotes: { type: [string, "null"] }
+        drankAt: { type: [string, "null"], format: date-time }
+        notes: { type: [string, "null"] }
+
+    WineTotals:
+      type: object
+      properties:
+        collection:
+          type: integer
+          description: Кол-во записей в активной коллекции
+        drank:
+          type: integer
+          description: Кол-во записей в разделе «Выпито»
+        bottles:
+          type: integer
+          description: Суммарное кол-во бутылок в коллекции
+        value:
+          type: integer
+          description: Суммарная стоимость коллекции (по purchasePrice)
+      required: [collection, drank, bottles, value]
+
+    BrowseFacets:
+      type: object
+      properties:
+        countries:
+          type: array
+          items: { type: string }
+        regions:
+          type: array
+          items: { type: string }
+
+    BrowseAppliedFilters:
+      type: object
+      properties:
+        countryKeys:
+          type: array
+          items: { type: string }
+        regionKey: { type: string }
+
+    WineSection:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Wine"
+        total:
+          type: integer
+          description: Всего вин этого цвета под текущими фильтрами
+        limit:
+          type: integer
+      required: [items, total, limit]
+
+    BrowseSectionsResponse:
+      type: object
+      description: Ответ /api/wines/browse в режиме группировки по цвету.
+      properties:
+        totals:
+          $ref: "#/components/schemas/WineTotals"
+        facets:
+          $ref: "#/components/schemas/BrowseFacets"
+        filters:
+          $ref: "#/components/schemas/BrowseAppliedFilters"
+        sections:
+          type: object
+          properties:
+            red: { $ref: "#/components/schemas/WineSection" }
+            white: { $ref: "#/components/schemas/WineSection" }
+            rose: { $ref: "#/components/schemas/WineSection" }
+            sparkling: { $ref: "#/components/schemas/WineSection" }
+      required: [totals, facets, filters, sections]
+
+    BrowseFlatResponse:
+      type: object
+      description: Ответ /api/wines/browse при flat=1.
+      properties:
+        totals:
+          $ref: "#/components/schemas/WineTotals"
+        facets:
+          $ref: "#/components/schemas/BrowseFacets"
+        filters:
+          $ref: "#/components/schemas/BrowseAppliedFilters"
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Wine"
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+      required: [totals, facets, filters, items, total, limit, offset]
+
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+        wineIds:
+          type: array
+          items: { type: string }
+          description: Присутствует, если ошибка относится к конкретным винам
+      required: [error]
