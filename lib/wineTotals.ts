@@ -7,12 +7,12 @@ export type WineTotals = {
   value: number;
 };
 
-export async function fetchWineTotals(): Promise<WineTotals> {
+export async function fetchWineTotals(userId: string): Promise<WineTotals> {
   const [collection, drank, activeRows] = await Promise.all([
-    prisma.wine.count({ where: { drank: false } }),
-    prisma.wine.count({ where: { drank: true } }),
+    prisma.wine.count({ where: { userId, drank: false } }),
+    prisma.wine.count({ where: { userId, drank: true } }),
     prisma.wine.findMany({
-      where: { drank: false },
+      where: { userId, drank: false },
       select: { quantity: true, purchasePrice: true },
     }),
   ]);

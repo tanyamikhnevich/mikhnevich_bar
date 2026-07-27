@@ -179,9 +179,10 @@ function priceFieldColumn(
 
 export function buildWineBrowseWhere(
   filters: WineBrowseFilters,
+  userId: string,
   color?: WineColor,
 ): Prisma.WineWhereInput {
-  const where: Prisma.WineWhereInput = { drank: filters.drank };
+  const where: Prisma.WineWhereInput = { userId, drank: filters.drank };
 
   if (color) where.color = color;
 

@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AddWineModal } from "./ui/AddWineModal";
 import { DrinkWineModal } from "./ui/DrinkWineModal";
 import { AppHeader } from "./ui/AppHeader";
+import { LogoutButton } from "./ui/LogoutButton";
 import { GuestSelectFooter } from "./ui/GuestSelectFooter";
 import { LoadingSpinner, TableLoadingPanel } from "./ui/LoadingSpinner";
 import { SortBar } from "./ui/SortBar";
@@ -374,6 +375,7 @@ function HomePageContent() {
             >
               + Добавить
             </button>
+            <LogoutButton />
           </>
         }
       />

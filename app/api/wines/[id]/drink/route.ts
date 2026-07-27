@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "../../../../../lib/prisma";
+import { requireApiSession } from "../../../../../lib/auth/dal";
 import { toWineJson } from "../../../../../lib/mapWineJson";
 import { parseDrankRating } from "../../../../../lib/wineDrankRating";
 import { wineDuplicateCreateData } from "../../../../../lib/wineRecord";
@@ -19,6 +20,9 @@ export async function POST(
   req: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
+  const auth = await requireApiSession();
+  if ("response" in auth) return auth.response;
+
   const { id } = await ctx.params;
   const body = (await req.json()) as {
     quantity?: unknown;
@@ -43,7 +47,9 @@ export async function POST(
   const drankNotes = parseOptionalNotes(body.drankNotes);
   const drankMeta = { drankAt, drankRating, drankNotes };
 
-  const wine = await prisma.wine.findUnique({ where: { id } });
+  const wine = await prisma.wine.findFirst({
+    where: { id, userId: auth.session.userId },
+  });
   if (!wine) {
     return NextResponse.json({ error: "Не найдено" }, { status: 404 });
   }
