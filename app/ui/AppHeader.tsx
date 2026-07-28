@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { AccountEmail } from "./AccountEmail";
 
 type Props = {
   emoji: string;
@@ -23,11 +24,14 @@ export function AppHeader({ emoji, title, subtitle, actions }: Props) {
             </div>
             <div className="mt-1 text-sm leading-snug text-zinc-600">{subtitle}</div>
           </div>
-          {actions ? (
-            <div className="flex shrink-0 flex-col items-stretch gap-2 sm:flex-row sm:items-center">
-              {actions}
-            </div>
-          ) : null}
+          <div className="flex shrink-0 flex-col items-end gap-1.5">
+            <AccountEmail />
+            {actions ? (
+              <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
+                {actions}
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
     </header>
