@@ -14,7 +14,14 @@ export type WineTotals = {
   collection: number;
   drank: number;
   bottles: number;
+  /** Закупка в шекелях (пересчитано по курсу из `exchange`). */
   value: number;
+};
+
+export type WineExchangeInfo = {
+  date: string;
+  stale: boolean;
+  ils: Record<string, number>;
 };
 
 export type WineBrowseFacets = {
@@ -30,6 +37,7 @@ export type WineBrowseSection = {
 
 export type WineBrowseByColorResponse = {
   totals: WineTotals;
+  exchange?: WineExchangeInfo;
   facets: WineBrowseFacets;
   filters: { countryKeys: string[]; regionKey: string };
   sections: Record<WineColor, WineBrowseSection>;
@@ -37,6 +45,7 @@ export type WineBrowseByColorResponse = {
 
 export type WineBrowseFlatResponse = {
   totals: WineTotals;
+  exchange?: WineExchangeInfo;
   facets: WineBrowseFacets;
   filters?: { countryKeys: string[]; regionKey: string };
   items: Wine[];

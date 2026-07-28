@@ -162,9 +162,6 @@ function ModalShell({
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
     >
       <div className="w-full max-w-md rounded-t-2xl bg-white shadow-xl sm:rounded-2xl">
         {children}

@@ -5,12 +5,12 @@ import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth/token";
 /**
  * Proxy (в Next.js 16 так теперь называется бывший Middleware).
  * Оптимистичная проверка: пускает на страницы только с валидной сессией.
- * Публичная страница только одна — /login. Гостевая карта (/guest) теперь
- * приватная: её видит лишь владелец после входа.
+ * Публичные страницы — /login и /docs (Swagger-документация API).
+ * Гостевая карта (/guest) теперь приватная: её видит лишь владелец после входа.
  * API-роуты сюда не попадают (исключены в matcher) — они проверяют доступ сами.
  */
 
-const PUBLIC_PATHS = ["/login"];
+const PUBLIC_PATHS = ["/login", "/docs"];
 
 function isPublic(pathname: string): boolean {
   return PUBLIC_PATHS.some(

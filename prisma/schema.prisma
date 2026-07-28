@@ -19,6 +19,17 @@ enum WineColor {
   sparkling
 }
 
+/// Курсы валют к шекелю на дату (кэш от внешнего API, обновляется ~раз в сутки).
+/// `ils` — карта вида { "ILS": 1, "EUR": 3.98, "USD": 3.4, ... } (1 ед. валюты = X ₪).
+model ExchangeRate {
+  id        String   @id @default(cuid())
+  date      String
+  ils       Json
+  fetchedAt DateTime @default(now())
+
+  @@index([fetchedAt])
+}
+
 /// Пользователь (владелец коллекции). Сейчас логинимся одним аккаунтом;
 /// в будущем к этой же таблице добавим регистрацию и привяжем вина к userId.
 model User {

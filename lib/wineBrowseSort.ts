@@ -1,9 +1,22 @@
 import type { Wine } from "./generated/prisma/client";
-import { collectionSortValueIls } from "./winePriceIls";
+import {
+  collectionSortValueIls,
+  convertAmountToIls,
+  type IlsRates,
+} from "./winePriceIls";
 import type { WineSortKey } from "./wineQuery";
 
+/**
+ * Сортировки, которые считаем в памяти, т.к. они требуют пересчёта в шекели
+ * по актуальному курсу (БД не знает курсов и сортировала бы числа как есть,
+ * складывая евро с шекелями).
+ */
 export function needsMemorySort(sortBy: WineSortKey): boolean {
-  return sortBy === "collectionValue";
+  return (
+    sortBy === "collectionValue" ||
+    sortBy === "purchasePrice" ||
+    sortBy === "originPrice"
+  );
 }
 
 function cmpNum(
@@ -28,18 +41,31 @@ export function sortWineRowsInMemory<T extends Wine>(
   rows: T[],
   sortBy: WineSortKey,
   sortDir: "asc" | "desc",
+  rates?: IlsRates,
 ): T[] {
   const m = sortDir === "asc" ? 1 : -1;
   return [...rows].sort((a, b) => {
     let c = 0;
     switch (sortBy) {
       case "collectionValue":
-        c = cmpNum(collectionSortValueIls(a), collectionSortValueIls(b));
-        if (c === 0) c = a.name.localeCompare(b.name, "ru");
+        c = cmpNum(collectionSortValueIls(a, rates), collectionSortValueIls(b, rates));
+        break;
+      case "purchasePrice":
+        c = cmpNum(
+          convertAmountToIls(a.purchasePrice, a.purchaseCurrency, rates),
+          convertAmountToIls(b.purchasePrice, b.purchaseCurrency, rates),
+        );
+        break;
+      case "originPrice":
+        c = cmpNum(
+          convertAmountToIls(a.originPrice, a.originCurrency, rates),
+          convertAmountToIls(b.originPrice, b.originCurrency, rates),
+        );
         break;
       default:
         return 0;
     }
+    if (c === 0) c = a.name.localeCompare(b.name, "ru");
     return c * m;
   });
 }
