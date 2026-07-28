@@ -4,6 +4,8 @@ import { requireApiSession } from "../../../../../lib/auth/dal";
 import { toWineJson } from "../../../../../lib/mapWineJson";
 import { parseDrankRating } from "../../../../../lib/wineDrankRating";
 import { wineDuplicateCreateData } from "../../../../../lib/wineRecord";
+import { getServerDictionary } from "../../../../../lib/i18n/server";
+import { interpolate } from "../../../../../lib/i18n/config";
 
 function parseOptionalRating(raw: unknown): number | null {
   return parseDrankRating(raw);
@@ -24,6 +26,7 @@ export async function POST(
   if ("response" in auth) return auth.response;
 
   const { id } = await ctx.params;
+  const { errors } = await getServerDictionary();
   const body = (await req.json()) as {
     quantity?: unknown;
     drankRating?: unknown;
@@ -37,7 +40,7 @@ export async function POST(
         ? body.quantity
         : Number(String(body.quantity).replace(",", "."));
     if (!Number.isFinite(n)) {
-      return NextResponse.json({ error: "Некорректное количество" }, { status: 400 });
+      return NextResponse.json({ error: errors.invalidQuantity }, { status: 400 });
     }
     amount = Math.round(n);
   }
@@ -51,17 +54,17 @@ export async function POST(
     where: { id, userId: auth.session.userId },
   });
   if (!wine) {
-    return NextResponse.json({ error: "Не найдено" }, { status: 404 });
+    return NextResponse.json({ error: errors.notFound }, { status: 404 });
   }
   if (wine.drank) {
-    return NextResponse.json({ error: "Вино уже в разделе «Выпито»" }, { status: 400 });
+    return NextResponse.json({ error: errors.alreadyDrunk }, { status: 400 });
   }
   if (amount < 1) {
-    return NextResponse.json({ error: "Укажите количество не меньше 1" }, { status: 400 });
+    return NextResponse.json({ error: errors.quantityMin1 }, { status: 400 });
   }
   if (amount > wine.quantity) {
     return NextResponse.json(
-      { error: `В коллекции только ${wine.quantity} шт.` },
+      { error: interpolate(errors.onlyInCollection, { count: wine.quantity }) },
       { status: 400 },
     );
   }
@@ -99,6 +102,6 @@ export async function POST(
       mode: "split" as const,
     });
   } catch {
-    return NextResponse.json({ error: "Не удалось отметить выпитым" }, { status: 500 });
+    return NextResponse.json({ error: errors.markDrunkFailed }, { status: 500 });
   }
 }

@@ -22,6 +22,8 @@ import {
 } from "@/lib/myWinesXlsxDrankMeta";
 import drankExcelMetaFile from "@/data/drank-excel-meta.json";
 import { WineRowEditor } from "./WineRowEditor";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import { useWineSelection } from "./WineSelectionContext";
 
 const EXCEL_META_BY_ROW = drankExcelMetaFile.byRow as Record<
   string,
@@ -74,6 +76,8 @@ export type WineMobileListProps = CollectionProps | GuestProps | GuestSelectProp
 
 export function WineMobileList(props: WineMobileListProps) {
   const { wines, variant } = props;
+  const { t, fmt } = useI18n();
+  const selection = useWineSelection();
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -81,13 +85,13 @@ export function WineMobileList(props: WineMobileListProps) {
 
   if (wines.length === 0) {
     return (
-      <div className="px-4 py-10 text-center text-sm text-zinc-500 md:hidden">Пусто</div>
+      <div className="px-4 py-10 text-center text-sm text-zinc-500 md:hidden">{t.common.empty}</div>
     );
   }
 
   const handleDelete = async (wine: Wine, onDelete: (w: Wine) => void | Promise<void>) => {
-    const label = wine.name?.trim() || "эту запись";
-    if (!window.confirm(`Удалить «${label}» из базы? Это действие нельзя отменить.`)) {
+    const label = wine.name?.trim() || t.table.thisRecord;
+    if (!window.confirm(fmt(t.table.confirmDelete, { name: label }))) {
       return;
     }
     setDeletingId(wine.id);
@@ -122,15 +126,15 @@ export function WineMobileList(props: WineMobileListProps) {
                 ]}
               />
               {ratings ? (
-                <p className="mt-1 text-sm text-zinc-600">Рейтинг: {ratings}</p>
+                <p className="mt-1 text-sm text-zinc-600">{t.table.ratingLabel}: {ratings}</p>
               ) : null}
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <PriceChip
-                  label="Бутылка"
+                  label={t.table.bottle}
                   value={formatTableAmount(w.guestBottlePrice)}
                 />
                 <PriceChip
-                  label="Бокал"
+                  label={t.table.glass}
                   value={formatTableAmount(w.guestGlassPrice)}
                 />
               </div>
@@ -156,7 +160,7 @@ export function WineMobileList(props: WineMobileListProps) {
                 .join(" ")}
             >
               {outOfStock ? (
-                <p className="text-sm text-zinc-500">Нет в наличии — {w.name}</p>
+                <p className="text-sm text-zinc-500">{fmt(t.guestSelect.outOfStockName, { name: w.name })}</p>
               ) : (
                 <>
                   <label className="flex cursor-pointer items-start gap-3">
@@ -173,14 +177,14 @@ export function WineMobileList(props: WineMobileListProps) {
                         {w.name || "—"}
                       </p>
                       <p className="mt-0.5 text-sm text-zinc-600">
-                        {w.producer || "—"} · {w.quantity} шт.
+                        {w.producer || "—"} · {fmt(t.table.pieces, { count: w.quantity })}
                       </p>
                     </div>
                   </label>
                   <div className="mt-3 grid grid-cols-2 gap-3 pl-8">
                     <label className="block">
                       <span className="mb-1 block text-xs font-medium text-zinc-600">
-                        Цена бут.
+                        {t.guestSelect.pricePerBottle}
                       </span>
                       <input
                         type="text"
@@ -199,15 +203,15 @@ export function WineMobileList(props: WineMobileListProps) {
                           .join(" ")}
                       />
                       {invalid ? (
-                        <p className="mt-1 text-xs text-red-600">Укажите цену</p>
+                        <p className="mt-1 text-xs text-red-600">{t.table.enterPrice}</p>
                       ) : null}
                     </label>
                     <label className="block">
                       <span className="mb-1 block text-xs font-medium text-zinc-600">
-                        Цена бок.
+                        {t.guestSelect.pricePerGlass}
                       </span>
                       <span className="mb-1 block text-[10px] leading-snug text-zinc-500">
-                        Пусто — не по бокалам. Иначе авто: ÷5+4
+                        {t.guestSelect.glassHint}
                       </span>
                       <input
                         type="text"
@@ -217,7 +221,7 @@ export function WineMobileList(props: WineMobileListProps) {
                           onDraftChange(w.id, { glassPrice: e.target.value })
                         }
                         disabled={!(row?.selected ?? false)}
-                        placeholder={row?.glassPriceManual ? "—" : "авто"}
+                        placeholder={row?.glassPriceManual ? "—" : t.table.auto}
                         className="h-11 w-full rounded-lg border border-zinc-200 bg-white px-3 text-base text-zinc-900"
                       />
                       {row?.glassPriceManual &&
@@ -230,7 +234,7 @@ export function WineMobileList(props: WineMobileListProps) {
                           }
                           className="mt-1 text-xs font-medium text-rose-700 hover:underline"
                         >
-                          Подставить по формуле
+                          {t.guestSelect.fillByFormula}
                         </button>
                       ) : null}
                     </label>
@@ -256,16 +260,40 @@ export function WineMobileList(props: WineMobileListProps) {
             ? drankDisplayFromExcel(w, EXCEL_META_BY_ROW)
             : null;
 
+        const selected = selection.active && selection.isSelected(w.id);
+
         return (
-          <li key={w.id} className="px-4 py-4">
+          <li
+            key={w.id}
+            className={[
+              "px-4 py-4",
+              selection.active ? "cursor-pointer" : "",
+              selected ? "bg-rose-50" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            onClick={
+              selection.active ? () => selection.toggle(w.id) : undefined
+            }
+          >
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
-                <p className="font-semibold leading-snug text-zinc-900">{w.name || "—"}</p>
+                <p className="font-semibold leading-snug text-zinc-900">
+                  {selection.active ? (
+                    <span
+                      className={`mr-1.5 ${selected ? "text-rose-700" : "text-zinc-300"}`}
+                      aria-hidden
+                    >
+                      {selected ? "✓" : "○"}
+                    </span>
+                  ) : null}
+                  {w.name || "—"}
+                </p>
                 <p className="mt-0.5 text-sm text-zinc-600">{w.producer || "—"}</p>
               </div>
               {variant === "collection" ? (
                 <span className="shrink-0 rounded-full bg-zinc-100 px-2.5 py-1 text-sm font-semibold text-zinc-800">
-                  {w.quantity} шт.
+                  {fmt(t.table.pieces, { count: w.quantity })}
                 </span>
               ) : null}
             </div>
@@ -280,11 +308,11 @@ export function WineMobileList(props: WineMobileListProps) {
             />
             {w.grape ? <p className="mt-1 text-sm text-zinc-500">{w.grape}</p> : null}
             {ratings ? (
-              <p className="mt-1 text-sm text-zinc-600">Рейтинг: {ratings}</p>
+              <p className="mt-1 text-sm text-zinc-600">{t.table.ratingLabel}: {ratings}</p>
             ) : null}
             {variant === "drank" && drankDisplay?.rating != null ? (
               <p className="mt-1 text-sm text-zinc-600">
-                Моя оценка: {formatDrankRating(drankDisplay.rating)}
+                {t.table.myScoreLabel}: {formatDrankRating(drankDisplay.rating)}
               </p>
             ) : null}
             {variant === "drank" && drankDisplay?.notes ? (
@@ -294,7 +322,7 @@ export function WineMobileList(props: WineMobileListProps) {
               <p className="mt-1 text-xs text-zinc-500">{extra}</p>
             ) : null}
             <p className="mt-1 text-xs text-zinc-500">
-              {variant === "drank" ? "Когда выпили" : "Покупка"}:{" "}
+              {variant === "drank" ? t.rowEditor.drankAt : t.table.purchase}:{" "}
               {variant === "drank"
                 ? w.drankAt
                   ? formatDateRU(w.drankAt.slice(0, 10))
@@ -304,15 +332,15 @@ export function WineMobileList(props: WineMobileListProps) {
 
             <div className="mt-3 grid grid-cols-3 gap-2">
               <PriceChip
-                label="Покупка"
+                label={t.table.purchase}
                 value={formatAmountWithCurrency(w.purchasePrice, w.purchaseCurrency)}
               />
               <PriceChip
-                label="Израиль"
+                label={t.table.israel}
                 value={formatAmountWithCurrency(w.israelPrice, w.israelCurrency)}
               />
               <PriceChip
-                label="Оригинал"
+                label={t.table.origin}
                 value={formatAmountWithCurrency(w.originPrice, w.originCurrency)}
               />
             </div>
@@ -327,7 +355,7 @@ export function WineMobileList(props: WineMobileListProps) {
                         disabled={isBusy}
                         className="min-h-11 flex-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-800 active:bg-emerald-100 disabled:opacity-50"
                       >
-                        Вернуть
+                        {t.common.restore}
                       </button>
                     )
                   : onDrink && (
@@ -337,7 +365,7 @@ export function WineMobileList(props: WineMobileListProps) {
                         disabled={isBusy}
                         className="min-h-11 flex-1 rounded-lg border border-rose-200 bg-rose-50 px-3 text-sm font-semibold text-rose-800 active:bg-rose-100 disabled:opacity-50"
                       >
-                        Выпить
+                        {t.common.drink}
                       </button>
                     )}
                 {onUpdate ? (
@@ -346,9 +374,9 @@ export function WineMobileList(props: WineMobileListProps) {
                     onClick={() => setEditingId(w.id)}
                     disabled={isBusy}
                     className="min-h-11 rounded-lg border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 active:bg-zinc-50 disabled:opacity-50"
-                    aria-label="Редактировать"
+                    aria-label={t.common.edit}
                   >
-                    {variant === "drank" ? "Изменить" : "Изменить"}
+                    {t.common.edit}
                   </button>
                 ) : null}
                 {onDelete ? (
@@ -358,7 +386,7 @@ export function WineMobileList(props: WineMobileListProps) {
                     disabled={isBusy}
                     className="min-h-11 rounded-lg border border-red-200 bg-white px-4 text-sm font-medium text-red-700 active:bg-red-50 disabled:opacity-50"
                   >
-                    Удалить
+                    {t.common.delete}
                   </button>
                 ) : null}
               </div>

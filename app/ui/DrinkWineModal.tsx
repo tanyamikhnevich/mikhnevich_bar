@@ -3,20 +3,13 @@
 import { useMemo, useState } from "react";
 import type { Wine } from "@/lib/wines";
 import { formatDrankRating, parseDrankRating } from "@/lib/wineDrankRating";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 export type DrinkWineConfirmInput = {
   quantity: number;
   drankRating?: number | null;
   drankNotes?: string | null;
 };
-
-function bottleLabel(n: number) {
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  if (mod10 === 1 && mod100 !== 11) return "бутылка";
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return "бутылки";
-  return "бутылок";
-}
 
 export function DrinkWineModal({
   wine,
@@ -27,13 +20,14 @@ export function DrinkWineModal({
   onClose: () => void;
   onConfirm: (input: DrinkWineConfirmInput) => void | Promise<void>;
 }) {
+  const { t } = useI18n();
   if (!wine) return null;
 
   return (
     <ModalShell onClose={onClose}>
       <div className="flex items-start justify-between gap-4 border-b border-zinc-200 px-4 py-4 sm:px-6 sm:py-5">
         <div>
-          <h2 className="text-lg font-semibold text-zinc-900">Отметить выпитым</h2>
+          <h2 className="text-lg font-semibold text-zinc-900">{t.drinkModal.title}</h2>
           <p className="mt-1 text-sm text-zinc-600">
             {wine.name}
             {wine.producer ? ` · ${wine.producer}` : ""}
@@ -44,7 +38,7 @@ export function DrinkWineModal({
           type="button"
           onClick={onClose}
           className="rounded-lg p-2 text-zinc-500 hover:bg-zinc-100"
-          aria-label="Закрыть"
+          aria-label={t.common.close}
         >
           ✕
         </button>
@@ -68,6 +62,7 @@ function DrinkWineForm({
   onClose: () => void;
   onConfirm: (input: DrinkWineConfirmInput) => void | Promise<void>;
 }) {
+  const { t, fmt } = useI18n();
   const maxQty = wine.quantity;
   const [amount, setAmount] = useState("1");
   const [rating, setRating] = useState("");
@@ -112,12 +107,11 @@ function DrinkWineForm({
       }}
     >
       <p className="text-sm text-zinc-600">
-        В коллекции <span className="font-medium text-zinc-900">{maxQty}</span>{" "}
-        {bottleLabel(maxQty)}. Сколько отметить выпитым?
+        {fmt(t.drinkModal.inCollection, { count: maxQty })}
       </p>
 
       <label className="mt-4 block">
-        <span className="mb-1 block text-xs font-semibold text-zinc-700">Количество</span>
+        <span className="mb-1 block text-xs font-semibold text-zinc-700">{t.drinkModal.quantity}</span>
         <input
           type="number"
           min={1}
@@ -131,14 +125,14 @@ function DrinkWineForm({
       </label>
 
       {!valid && amount.trim() !== "" ? (
-        <p className="mt-2 text-xs text-red-600">От 1 до {maxQty}</p>
+        <p className="mt-2 text-xs text-red-600">{fmt(t.drinkModal.range, { max: maxQty })}</p>
       ) : null}
 
       <div className="mt-5 border-t border-zinc-100 pt-4">
-        <p className="text-xs font-semibold text-zinc-700">Впечатления (необязательно)</p>
+        <p className="text-xs font-semibold text-zinc-700">{t.drinkModal.impressions}</p>
         <label className="mt-2 block">
           <span className="mb-1 block text-[11px] font-medium text-zinc-600">
-            Моя оценка (0–10)
+            {t.drinkModal.myRating}
           </span>
           <input
             type="text"
@@ -150,16 +144,16 @@ function DrinkWineForm({
           />
         </label>
         {!ratingValid ? (
-          <p className="mt-1 text-xs text-red-600">Оценка от 0 до 10, например 9,4</p>
+          <p className="mt-1 text-xs text-red-600">{t.drinkModal.ratingRange}</p>
         ) : null}
 
         <label className="mt-3 block">
-          <span className="mb-1 block text-[11px] font-medium text-zinc-600">Заметки</span>
+          <span className="mb-1 block text-[11px] font-medium text-zinc-600">{t.drinkModal.notes}</span>
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={3}
-            placeholder="Что запомнилось…"
+            placeholder={t.drinkModal.notesPlaceholder}
             className="w-full resize-y rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-rose-300 focus:ring-4 focus:ring-rose-100"
           />
         </label>
@@ -171,7 +165,7 @@ function DrinkWineForm({
           onClick={onClose}
           className="min-h-11 rounded-xl border border-zinc-200 bg-white text-sm font-medium text-zinc-700 active:bg-zinc-50 sm:order-1 sm:rounded-lg sm:px-4 sm:py-2"
         >
-          Отмена
+          {t.common.cancel}
         </button>
         <button
           type="button"
@@ -179,14 +173,14 @@ function DrinkWineForm({
           onClick={() => submit(true)}
           className="min-h-11 rounded-xl border border-zinc-200 bg-zinc-50 text-sm font-medium text-zinc-800 active:bg-zinc-100 disabled:opacity-50 sm:order-2 sm:rounded-lg sm:px-4 sm:py-2"
         >
-          Пропустить
+          {t.common.skip}
         </button>
         <button
           type="submit"
           disabled={!valid || !ratingValid || submitting}
           className="min-h-11 rounded-xl bg-rose-700 text-sm font-semibold text-white active:bg-rose-800 disabled:opacity-50 sm:order-3 sm:rounded-lg sm:px-4 sm:py-2"
         >
-          {submitting ? "Сохранение…" : "Выпить"}
+          {submitting ? t.common.saving : t.common.drink}
         </button>
       </div>
     </form>

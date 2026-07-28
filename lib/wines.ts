@@ -7,13 +7,6 @@ import { compareWineYears } from "./wineUtils";
 export const WINE_COLOR_ORDER = ["red", "white", "rose", "sparkling"] as const;
 export type WineColor = (typeof WINE_COLOR_ORDER)[number];
 
-export const WINE_COLOR_LABEL: Record<WineColor, string> = {
-  red: "Красное",
-  white: "Белое",
-  rose: "Розовое",
-  sparkling: "Игристое",
-};
-
 /** Пастельный фон шапки секции таблицы по типу вина */
 export const WINE_SECTION_HEADER_CLASS: Record<WineColor, string> = {
   red: "border-b border-rose-200/80 bg-rose-100/95 text-rose-950",

@@ -1,10 +1,11 @@
 export const WINE_CURRENCY_OTHER_VALUE = "__other__";
 
+// Подписи валют берутся из словаря (см. `currencies` в lib/i18n) по ключу `key`.
 export const WINE_CURRENCY_PRESETS = [
-  { key: "ILS", symbol: "₪", label: "₪ шекель" },
-  { key: "USD", symbol: "$", label: "$ доллар" },
-  { key: "EUR", symbol: "€", label: "€ евро" },
-  { key: "RUB", symbol: "₽", label: "₽ рубль" },
+  { key: "ILS", symbol: "₪" },
+  { key: "USD", symbol: "$" },
+  { key: "EUR", symbol: "€" },
+  { key: "RUB", symbol: "₽" },
 ] as const;
 
 export type WineCurrencyPresetKey = (typeof WINE_CURRENCY_PRESETS)[number]["key"];

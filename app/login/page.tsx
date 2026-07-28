@@ -7,6 +7,7 @@ import {
   type LoginState,
   type RegisterState,
 } from "../actions/auth";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -30,6 +31,7 @@ function PasswordField({
   onChange: (v: string) => void;
   autoComplete: string;
 }) {
+  const { t } = useI18n();
   const [show, setShow] = useState(false);
   return (
     <div>
@@ -51,9 +53,9 @@ function PasswordField({
           type="button"
           onClick={() => setShow((s) => !s)}
           className="absolute inset-y-0 right-0 flex items-center px-3 text-xs font-medium text-zinc-500 hover:text-zinc-800"
-          aria-label={show ? "Скрыть пароль" : "Показать пароль"}
+          aria-label={show ? t.login.hidePassword : t.login.showPassword}
         >
-          {show ? "Скрыть" : "Показать"}
+          {show ? t.login.hide : t.login.show}
         </button>
       </div>
     </div>
@@ -61,6 +63,7 @@ function PasswordField({
 }
 
 function LoginForm() {
+  const { t } = useI18n();
   const [state, action, pending] = useActionState<LoginState, FormData>(
     login,
     undefined,
@@ -75,7 +78,7 @@ function LoginForm() {
     >
       <div>
         <label htmlFor="login-email" className={LABEL_CLASS}>
-          Email
+          {t.login.email}
         </label>
         <input
           id="login-email"
@@ -92,7 +95,7 @@ function LoginForm() {
       <PasswordField
         id="login-password"
         name="password"
-        label="Пароль"
+        label={t.login.password}
         value={password}
         onChange={setPassword}
         autoComplete="current-password"
@@ -109,13 +112,14 @@ function LoginForm() {
         disabled={pending}
         className="min-h-11 w-full rounded-xl bg-rose-700 px-4 text-sm font-semibold text-white active:bg-rose-800 disabled:opacity-60"
       >
-        {pending ? "Вход…" : "Войти"}
+        {pending ? t.login.loginPending : t.login.loginSubmit}
       </button>
     </form>
   );
 }
 
 function RegisterForm() {
+  const { t } = useI18n();
   const [state, action, pending] = useActionState<RegisterState, FormData>(
     register,
     undefined,
@@ -131,13 +135,11 @@ function RegisterForm() {
     emailValid && passwordLongEnough && passwordsMatch && !pending;
 
   // Живые подсказки — показываем, только когда поле уже заполнено.
-  const emailHint = email.length > 0 && !emailValid ? "Некорректный email" : null;
+  const emailHint = email.length > 0 && !emailValid ? t.login.hintInvalidEmail : null;
   const passwordHint =
-    password.length > 0 && !passwordLongEnough
-      ? "Минимум 8 символов"
-      : null;
+    password.length > 0 && !passwordLongEnough ? t.login.hintMin8 : null;
   const confirmHint =
-    confirmPassword.length > 0 && !passwordsMatch ? "Пароли не совпадают" : null;
+    confirmPassword.length > 0 && !passwordsMatch ? t.login.hintNoMatch : null;
 
   return (
     <form
@@ -146,7 +148,7 @@ function RegisterForm() {
     >
       <div>
         <label htmlFor="register-email" className={LABEL_CLASS}>
-          Email
+          {t.login.email}
         </label>
         <input
           id="register-email"
@@ -167,7 +169,7 @@ function RegisterForm() {
         <PasswordField
           id="register-password"
           name="password"
-          label="Пароль"
+          label={t.login.password}
           value={password}
           onChange={setPassword}
           autoComplete="new-password"
@@ -181,7 +183,7 @@ function RegisterForm() {
         <PasswordField
           id="register-confirm"
           name="confirmPassword"
-          label="Повторите пароль"
+          label={t.login.confirmPassword}
           value={confirmPassword}
           onChange={setConfirmPassword}
           autoComplete="new-password"
@@ -202,13 +204,14 @@ function RegisterForm() {
         disabled={!canSubmit}
         className="min-h-11 w-full rounded-xl bg-rose-700 px-4 text-sm font-semibold text-white active:bg-rose-800 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {pending ? "Регистрация…" : "Зарегистрироваться"}
+        {pending ? t.login.registerPending : t.login.registerSubmit}
       </button>
     </form>
   );
 }
 
 export default function AuthPage() {
+  const { t } = useI18n();
   const [mode, setMode] = useState<"login" | "register">("login");
 
   const tabClass = (active: boolean) =>
@@ -226,12 +229,12 @@ export default function AuthPage() {
             🍷
           </div>
           <h1 className="mt-2 text-xl font-semibold tracking-tight">
-            Моя коллекция вин
+            {t.login.appTitle}
           </h1>
           <p className="mt-1 text-sm text-zinc-600">
             {mode === "login"
-              ? "Войдите, чтобы продолжить"
-              : "Создайте аккаунт со своей коллекцией"}
+              ? t.login.loginSubtitle
+              : t.login.registerSubtitle}
           </p>
         </div>
 
@@ -241,14 +244,14 @@ export default function AuthPage() {
             onClick={() => setMode("login")}
             className={tabClass(mode === "login")}
           >
-            Вход
+            {t.login.tabLogin}
           </button>
           <button
             type="button"
             onClick={() => setMode("register")}
             className={tabClass(mode === "register")}
           >
-            Регистрация
+            {t.login.tabRegister}
           </button>
         </div>
 

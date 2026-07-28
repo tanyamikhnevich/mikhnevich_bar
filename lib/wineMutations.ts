@@ -2,6 +2,7 @@
 
 import type { GuestWineUpdate } from "./guestWineApi";
 import type { NewWineInput, Wine } from "./wines";
+import { appendBrowseParams, type WineBrowseFilters } from "./wineQuery";
 
 async function parseErrorMessage(res: Response) {
   try {
@@ -109,6 +110,23 @@ export async function fetchCollectionWinesApi(): Promise<Wine[]> {
   if (!res.ok) throw new Error(await parseErrorMessage(res));
   const data = (await res.json()) as Wine[];
   return data.filter((w) => !w.drank);
+}
+
+/** Все выпитые вина под текущими фильтрами — для режима ручного подсчёта. */
+export async function fetchDrankWinesApi(
+  filters: WineBrowseFilters,
+): Promise<Wine[]> {
+  const sp = new URLSearchParams();
+  sp.set("flat", "1");
+  appendBrowseParams(sp, { ...filters, drank: true });
+  sp.set("limit", "500");
+  sp.set("offset", "0");
+  const res = await fetch(`/api/wines/browse?${sp.toString()}`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(await parseErrorMessage(res));
+  const json = (await res.json()) as { items: Wine[] };
+  return json.items ?? [];
 }
 
 export async function saveGuestMenuApi(items: GuestWineUpdate[]): Promise<void> {

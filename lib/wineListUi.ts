@@ -27,65 +27,43 @@ export function defaultSortForContext(ctx: WineFilterContext) {
 const COLLECTION_PRICE_FIELDS: WinePriceFilterField[] = ["purchase", "israel", "origin"];
 const GUEST_PRICE_FIELDS: WinePriceFilterField[] = ["guestBottle", "guestGlass"];
 
-export function priceFieldOptionsFor(ctx: WineFilterContext): {
-  value: WinePriceFilterField;
-  label: string;
-}[] {
-  if (ctx === "guest") {
-    return [
-      { value: "guestBottle", label: "бутылка (гость)" },
-      { value: "guestGlass", label: "бокал (гость)" },
-    ];
-  }
-  return [
-    { value: "purchase", label: "покупка" },
-    { value: "israel", label: "цена в Израиле" },
-    { value: "origin", label: "цена (оригинал)" },
-  ];
+/** Порядок полей цены для фильтра. Подписи берутся из словаря (см. `priceField`). */
+export function priceFieldsFor(ctx: WineFilterContext): WinePriceFilterField[] {
+  return ctx === "guest" ? GUEST_PRICE_FIELDS : COLLECTION_PRICE_FIELDS;
 }
 
-export function sortOptionsFor(ctx: WineFilterContext): { value: WineSortKey; label: string }[] {
-  if (ctx === "guest") {
-    return [
-      { value: "guestBottlePrice", label: "цена за бутылку" },
-      { value: "guestGlassPrice", label: "цена за бокал" },
-      { value: "vivinoRating", label: "рейтинг Vivino" },
-      { value: "year", label: "год" },
-      { value: "name", label: "название" },
-    ];
-  }
-  if (ctx === "drank") {
-    return [
-      { value: "drankAt", label: "дата, когда выпили" },
-      { value: "drankRating", label: "моя оценка" },
-      { value: "purchasePrice", label: "цена покупки" },
-      { value: "israelPrice", label: "цена в Израиле" },
-      { value: "name", label: "название" },
-      { value: "year", label: "год" },
-    ];
-  }
-  return [
-    { value: "collectionValue", label: "цена (Израиль / покупка в ₪)" },
-    { value: "israelPrice", label: "цена в Израиле" },
-    { value: "purchasePrice", label: "цена покупки" },
-    { value: "purchaseDate", label: "дата покупки" },
-    { value: "vivinoRating", label: "рейтинг Vivino" },
-    { value: "year", label: "год" },
-    { value: "name", label: "название" },
-  ];
-}
+const COLLECTION_SORT_KEYS: WineSortKey[] = [
+  "collectionValue",
+  "israelPrice",
+  "purchasePrice",
+  "purchaseDate",
+  "vivinoRating",
+  "year",
+  "name",
+];
+const DRANK_SORT_KEYS: WineSortKey[] = [
+  "drankAt",
+  "drankRating",
+  "purchasePrice",
+  "israelPrice",
+  "name",
+  "year",
+];
+const GUEST_SORT_KEYS: WineSortKey[] = [
+  "guestBottlePrice",
+  "guestGlassPrice",
+  "vivinoRating",
+  "year",
+  "name",
+];
 
 export function sanitizePriceFieldForContext(
   field: WinePriceFilterField,
   ctx: WineFilterContext,
 ): WinePriceFilterField {
-  const allowed = priceFieldOptionsFor(ctx).map((o) => o.value);
+  const allowed = priceFieldsFor(ctx);
   if (allowed.includes(field)) return field;
   return allowed[0]!;
-}
-
-export function ratingFilterLabelFor(ctx: WineFilterContext): string {
-  return ctx === "drank" ? "Моя оценка ≥" : "Vivino ≥";
 }
 
 export function emptyWineUrlFilters(tab: WineFilterContext): {
@@ -109,7 +87,9 @@ export function emptyWineUrlFilters(tab: WineFilterContext): {
 }
 
 export function sortKeysForContext(ctx: WineFilterContext): WineSortKey[] {
-  return sortOptionsFor(ctx).map((o) => o.value);
+  if (ctx === "guest") return GUEST_SORT_KEYS;
+  if (ctx === "drank") return DRANK_SORT_KEYS;
+  return COLLECTION_SORT_KEYS;
 }
 
 export function isSortKeyValidForContext(

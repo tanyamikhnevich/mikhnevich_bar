@@ -14,6 +14,9 @@ import { WineFiltersBar } from "./ui/WineFiltersBar";
 import { SegmentedTabs } from "./ui/SegmentedTabs";
 import { GuestWineTable } from "./ui/GuestWineTable";
 import { WineTable } from "./ui/WineTable";
+import { DrankSummaryPanel } from "./ui/DrankSummaryPanel";
+import { DrankSelectFooter } from "./ui/DrankSelectFooter";
+import { WineSelectionProvider } from "./ui/WineSelectionContext";
 import type { GuestSelectionDraft } from "@/lib/guestSelection";
 import {
   buildGuestSelectionDraft,
@@ -21,24 +24,26 @@ import {
   patchGuestDraftRow,
   validateGuestSelectionDraft,
 } from "@/lib/guestSelection";
-import {
-  defaultSortForContext,
-  sortOptionsFor,
-} from "@/lib/wineListUi";
+import { sortKeysForContext } from "@/lib/wineListUi";
 import type { Wine, WineColor, WineSortKey } from "@/lib/wines";
 import {
   formatDateRU,
   formatTableAmount,
-  WINE_COLOR_LABEL,
+  groupWinesByColor,
   WINE_COLOR_ORDER,
   WINE_SECTION_HEADER_CLASS,
 } from "@/lib/wines";
+import { convertAmountToIls } from "@/lib/winePriceIls";
+import { useDrankStats } from "@/lib/drankStatsClient";
+import { DEFAULT_DRANK_PERIOD, type DrankPeriodKey } from "@/lib/drankPeriod";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 import { useWineBrowseByColor } from "@/lib/wineBrowse";
 import {
   addWineApi,
   deleteWineApi,
   drinkWineApi,
   fetchCollectionWinesApi,
+  fetchDrankWinesApi,
   restoreWineApi,
   saveGuestMenuApi,
   updateWineApi,
@@ -50,6 +55,7 @@ import {
 import { homeUrlToBrowseFilters, useHomeWineListUrl } from "@/lib/wineUrlState";
 
 function HomePageContent() {
+  const { t, fmt } = useI18n();
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -81,6 +87,21 @@ function HomePageContent() {
   const [guestFormError, setGuestFormError] = useState<string | null>(null);
   const [guestSaving, setGuestSaving] = useState(false);
   const [guestLoading, setGuestLoading] = useState(false);
+
+  const [drankPeriod, setDrankPeriod] = useState<DrankPeriodKey>(
+    DEFAULT_DRANK_PERIOD,
+  );
+  const [drankSelectMode, setDrankSelectMode] = useState(false);
+  const [drankSelectedIds, setDrankSelectedIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [drankSourceWines, setDrankSourceWines] = useState<Wine[]>([]);
+  const [drankSelectLoading, setDrankSelectLoading] = useState(false);
+
+  const drankFilters = useMemo(
+    () => homeUrlToBrowseFilters(searchParams),
+    [searchParams],
+  );
 
   const browseFilters = useMemo(
     () => ({
@@ -125,6 +146,73 @@ function HomePageContent() {
     value: 0,
   };
   const exchange = data?.exchange;
+
+  const { data: drankStatsData, loading: drankStatsLoading } = useDrankStats(
+    drankFilters,
+    drankPeriod,
+    tab === "drank" && !drankSelectMode,
+  );
+
+  const toggleDrankSelected = useCallback((id: string) => {
+    setDrankSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const enterDrankSelect = useCallback(() => {
+    setDrankSelectLoading(true);
+    void fetchDrankWinesApi(drankFilters)
+      .then((wines) => {
+        setDrankSourceWines(wines);
+        setDrankSelectedIds(new Set());
+        setDrankSelectMode(true);
+      })
+      .catch((e) => alert(e instanceof Error ? e.message : String(e)))
+      .finally(() => setDrankSelectLoading(false));
+  }, [drankFilters]);
+
+  const exitDrankSelect = useCallback(() => {
+    setDrankSelectMode(false);
+    setDrankSelectedIds(new Set());
+    setDrankSourceWines([]);
+  }, []);
+
+  const drankSelection = useMemo(
+    () => ({
+      active: drankSelectMode,
+      isSelected: (id: string) => drankSelectedIds.has(id),
+      toggle: toggleDrankSelected,
+    }),
+    [drankSelectMode, drankSelectedIds, toggleDrankSelected],
+  );
+
+  const drankGroups = useMemo(
+    () => groupWinesByColor(drankSourceWines),
+    [drankSourceWines],
+  );
+
+  const drankSelected = useMemo(() => {
+    let bottles = 0;
+    let sumIls = 0;
+    const rates = exchange?.ils;
+    for (const w of drankSourceWines) {
+      if (!drankSelectedIds.has(w.id)) continue;
+      const qty = w.quantity > 0 ? w.quantity : 1;
+      bottles += qty;
+      sumIls +=
+        (convertAmountToIls(w.purchasePrice, w.purchaseCurrency, rates) ?? 0) *
+        qty;
+    }
+    return { bottles, sumIls };
+  }, [drankSourceWines, drankSelectedIds, exchange]);
+
+  useEffect(() => {
+    if (tab !== "drank" && drankSelectMode) exitDrankSelect();
+  }, [tab, drankSelectMode, exitDrankSelect]);
+
   const countryOptions = data?.facets.countries ?? [];
   const regionOptions = data?.facets.regions ?? [];
 
@@ -194,7 +282,7 @@ function HomePageContent() {
     const validation = validateGuestSelectionDraft(guestDraft);
     if (!validation.ok) {
       setGuestValidationIds(new Set(validation.wineIds));
-      setGuestFormError("Для каждого выбранного вина укажите цену за бутылку");
+      setGuestFormError(t.errors.guestBottlePriceRequired);
       return;
     }
     setGuestSaving(true);
@@ -211,7 +299,7 @@ function HomePageContent() {
     } finally {
       setGuestSaving(false);
     }
-  }, [guestDraft, guestSourceWines, exitGuestSelectMode, refetch]);
+  }, [guestDraft, guestSourceWines, exitGuestSelectMode, refetch, t]);
 
   const setNameQuery = useCallback(
     (value: string) => {
@@ -331,27 +419,32 @@ function HomePageContent() {
     data &&
     WINE_COLOR_ORDER.some((c) => (data.sections[c]?.total ?? 0) > 0);
 
-  const sortOptions = sortOptionsFor(tab);
+  const sortOptions = sortKeysForContext(tab);
 
   return (
     <div className="min-h-full bg-zinc-50 text-zinc-900">
       <AppHeader
         emoji="🍷"
-        title="Моя коллекция"
+        title={t.home.title}
         subtitle={
           <>
-            {totals.bottles} бут. · закупка {formatTableAmount(totals.value)}
-            {" ₪"}
+            {fmt(t.home.subtitle, {
+              bottles: totals.bottles,
+              value: formatTableAmount(totals.value),
+            })}
             {exchange ? (
               <span className="mt-0.5 block text-xs text-zinc-400">
-                Курс{exchange.date ? ` на ${formatDateRU(exchange.date)}` : ""}:{" "}
+                {exchange.date
+                  ? fmt(t.home.rateOn, { date: formatDateRU(exchange.date) })
+                  : t.home.rate}
+                :{" "}
                 {exchange.ils.EUR
                   ? `€ ${exchange.ils.EUR.toFixed(2)} ₪`
                   : null}
                 {exchange.ils.USD
                   ? ` · $ ${exchange.ils.USD.toFixed(2)} ₪`
                   : null}
-                {exchange.stale ? " · устаревший" : ""}
+                {exchange.stale ? " · " + t.home.stale : ""}
               </span>
             ) : null}
           </>
@@ -362,7 +455,7 @@ function HomePageContent() {
               href="/guest"
               className="inline-flex min-h-11 items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 active:bg-zinc-50 sm:min-h-9 sm:rounded-lg sm:px-3 sm:py-2"
             >
-              Гости
+              {t.home.guests}
             </Link>
             {tab === "collection" && guestSelectMode ? (
               <button
@@ -371,7 +464,7 @@ function HomePageContent() {
                 disabled={guestSaving}
                 className="inline-flex min-h-11 items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 active:bg-zinc-50 disabled:opacity-60 sm:min-h-9 sm:rounded-lg sm:px-3 sm:py-2"
               >
-                Отменить
+                {t.common.cancel}
               </button>
             ) : tab === "collection" ? (
               <button
@@ -380,7 +473,25 @@ function HomePageContent() {
                 disabled={guestLoading}
                 className="inline-flex min-h-11 items-center justify-center rounded-xl border border-rose-200 bg-rose-50 px-3 text-sm font-medium text-rose-800 active:bg-rose-100 disabled:opacity-60 sm:min-h-9 sm:rounded-lg sm:py-2"
               >
-                {guestLoading ? "Загрузка…" : "Выбрать вина для гостей"}
+                {guestLoading ? t.common.loading : t.home.selectForGuests}
+              </button>
+            ) : null}
+            {tab === "drank" && drankSelectMode ? (
+              <button
+                type="button"
+                onClick={exitDrankSelect}
+                className="inline-flex min-h-11 items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 active:bg-zinc-50 sm:min-h-9 sm:rounded-lg sm:px-3 sm:py-2"
+              >
+                {t.drankSelect.exit}
+              </button>
+            ) : tab === "drank" ? (
+              <button
+                type="button"
+                onClick={enterDrankSelect}
+                disabled={drankSelectLoading}
+                className="inline-flex min-h-11 items-center justify-center rounded-xl border border-rose-200 bg-rose-50 px-3 text-sm font-medium text-rose-800 active:bg-rose-100 disabled:opacity-60 sm:min-h-9 sm:rounded-lg sm:py-2"
+              >
+                {drankSelectLoading ? t.common.loading : t.drankStats.countSelected}
               </button>
             ) : null}
             <button
@@ -388,7 +499,7 @@ function HomePageContent() {
               onClick={() => openAddWine()}
               className="inline-flex min-h-11 items-center justify-center rounded-xl bg-rose-700 px-4 text-sm font-semibold text-white active:bg-rose-800 sm:min-h-9 sm:rounded-lg sm:px-4 sm:py-2"
             >
-              + Добавить
+              {t.home.addButton}
             </button>
             <LogoutButton />
           </>
@@ -412,8 +523,11 @@ function HomePageContent() {
                 onChange={setTab}
                 disabled={isRefreshing}
                 options={[
-                  { value: "collection", label: `Коллекция (${totals.collection})` },
-                  { value: "drank", label: `Выпито (${totals.drank})` },
+                  {
+                    value: "collection",
+                    label: fmt(t.home.tabCollection, { count: totals.collection }),
+                  },
+                  { value: "drank", label: fmt(t.home.tabDrank, { count: totals.drank }) },
                 ]}
               />
 
@@ -449,13 +563,53 @@ function HomePageContent() {
               />
             </div>
 
+            {tab === "drank" && !drankSelectMode ? (
+              <DrankSummaryPanel
+                data={drankStatsData}
+                loading={drankStatsLoading}
+                period={drankPeriod}
+                onPeriod={setDrankPeriod}
+              />
+            ) : null}
+
+            {drankSelectMode ? (
+              <WineSelectionProvider value={drankSelection}>
+                <div className="space-y-6">
+                  {WINE_COLOR_ORDER.filter(
+                    (color) => drankGroups[color].length > 0,
+                  ).map((color) => (
+                    <section
+                      key={color}
+                      className="rounded-xl border border-zinc-200 bg-white shadow-sm"
+                    >
+                      <div
+                        className={`px-4 py-2 ${WINE_SECTION_HEADER_CLASS[color]}`}
+                      >
+                        <h2 className="text-sm font-semibold">{t.colors[color]}</h2>
+                      </div>
+                      <WineTable
+                        variant="drank"
+                        wines={drankGroups[color]}
+                        showActions={false}
+                        countryOptions={countryOptions}
+                      />
+                    </section>
+                  ))}
+                  {drankSourceWines.length === 0 ? (
+                    <div className="rounded-xl border border-zinc-200 bg-white px-4 py-12 text-center text-sm text-zinc-500">
+                      {t.home.emptySection}
+                    </div>
+                  ) : null}
+                </div>
+              </WineSelectionProvider>
+            ) : (
             <div className="relative min-h-[calc(100dvh-14rem)] space-y-6">
               {isRefreshing ? (
                 <div
                   className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-zinc-50/75"
                   aria-busy="true"
                 >
-                  <LoadingSpinner label="Загрузка…" />
+                  <LoadingSpinner />
                 </div>
               ) : null}
               {hasAnySection ? (
@@ -476,7 +630,7 @@ function HomePageContent() {
                         className={`px-4 py-2 ${WINE_SECTION_HEADER_CLASS[color]}`}
                       >
                         <h2 className="text-sm font-semibold">
-                          {WINE_COLOR_LABEL[color]}
+                          {t.colors[color]}
                         </h2>
                       </div>
 
@@ -513,9 +667,9 @@ function HomePageContent() {
                             className="flex min-h-9 w-full items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 text-sm font-medium text-zinc-800 active:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             {loadingMoreColor === color ? (
-                              <LoadingSpinner label="Загрузка…" />
+                              <LoadingSpinner />
                             ) : (
-                              "Показать ещё"
+                              t.common.showMore
                             )}
                           </button>
                         </div>
@@ -525,10 +679,11 @@ function HomePageContent() {
                 })
               ) : (
                 <div className="rounded-xl border border-zinc-200 bg-white px-4 py-12 text-center text-sm text-zinc-500">
-                  Нет вин в этом разделе или по заданным фильтрам
+                  {t.home.emptySection}
                 </div>
               )}
             </div>
+            )}
 
             {guestSelectMode && tab === "collection" ? (
               <GuestSelectFooter
@@ -536,6 +691,15 @@ function HomePageContent() {
                 saving={guestSaving}
                 onSave={() => void handleSaveGuestMenu()}
                 onCancel={exitGuestSelectMode}
+              />
+            ) : null}
+
+            {tab === "drank" && drankSelectMode ? (
+              <DrankSelectFooter
+                count={drankSelected.bottles}
+                sumIls={drankSelected.sumIls}
+                onReset={() => setDrankSelectedIds(new Set())}
+                onExit={exitDrankSelect}
               />
             ) : null}
           </>
@@ -566,15 +730,18 @@ function HomePageContent() {
   );
 }
 
+function HomeFallback() {
+  const { t } = useI18n();
+  return (
+    <div className="min-h-full bg-zinc-50 py-16 text-center text-sm text-zinc-500">
+      {t.common.loading}
+    </div>
+  );
+}
+
 export default function Home() {
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-full bg-zinc-50 py-16 text-center text-sm text-zinc-500">
-          Загрузка…
-        </div>
-      }
-    >
+    <Suspense fallback={<HomeFallback />}>
       <HomePageContent />
     </Suspense>
   );

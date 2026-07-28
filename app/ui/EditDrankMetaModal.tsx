@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import type { Wine } from "@/lib/wines";
 import { formatDrankRating, parseDrankRating } from "@/lib/wineDrankRating";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 export type EditDrankMetaInput = {
   drankRating: number | null;
@@ -22,13 +23,14 @@ export function EditDrankMetaModal({
   onClose: () => void;
   onSave: (input: EditDrankMetaInput) => void | Promise<void>;
 }) {
+  const { t } = useI18n();
   if (!wine) return null;
 
   return (
     <ModalShell onClose={onClose}>
       <div className="flex items-start justify-between gap-4 border-b border-zinc-200 px-4 py-4 sm:px-6 sm:py-5">
         <div>
-          <h2 className="text-lg font-semibold text-zinc-900">Оценка и заметки</h2>
+          <h2 className="text-lg font-semibold text-zinc-900">{t.editDrank.title}</h2>
           <p className="mt-1 text-sm text-zinc-600">
             {wine.name}
             {wine.producer ? ` · ${wine.producer}` : ""}
@@ -38,7 +40,7 @@ export function EditDrankMetaModal({
           type="button"
           onClick={onClose}
           className="rounded-lg p-2 text-zinc-500 hover:bg-zinc-100"
-          aria-label="Закрыть"
+          aria-label={t.common.close}
         >
           ✕
         </button>
@@ -65,6 +67,7 @@ function EditDrankMetaForm({
   onClose: () => void;
   onSave: (input: EditDrankMetaInput) => void | Promise<void>;
 }) {
+  const { t, fmt } = useI18n();
   const [rating, setRating] = useState(
     initialRating != null ? String(initialRating).replace(".", ",") : "",
   );
@@ -99,7 +102,7 @@ function EditDrankMetaForm({
     >
       <label className="block">
         <span className="mb-1 block text-xs font-semibold text-zinc-700">
-          Моя оценка (0–10)
+          {t.drinkModal.myRating}
         </span>
         <input
           type="text"
@@ -111,21 +114,21 @@ function EditDrankMetaForm({
           autoFocus
         />
         {!ratingValid ? (
-          <p className="mt-1 text-xs text-red-600">Оценка от 0 до 10, например 9,4</p>
+          <p className="mt-1 text-xs text-red-600">{t.drinkModal.ratingRange}</p>
         ) : parsedRating != null ? (
           <p className="mt-1 text-xs text-zinc-500">
-            Будет сохранено: {formatDrankRating(parsedRating)}
+            {fmt(t.editDrank.willSave, { value: formatDrankRating(parsedRating) })}
           </p>
         ) : null}
       </label>
 
       <label className="mt-4 block">
-        <span className="mb-1 block text-xs font-semibold text-zinc-700">Заметки</span>
+        <span className="mb-1 block text-xs font-semibold text-zinc-700">{t.drinkModal.notes}</span>
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           rows={4}
-          placeholder="Что запомнилось…"
+          placeholder={t.drinkModal.notesPlaceholder}
           className="w-full resize-y rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-rose-300 focus:ring-4 focus:ring-rose-100"
         />
       </label>
@@ -136,14 +139,14 @@ function EditDrankMetaForm({
           onClick={onClose}
           className="min-h-11 rounded-xl border border-zinc-200 bg-white text-sm font-medium text-zinc-700 active:bg-zinc-50 sm:rounded-lg sm:px-4 sm:py-2"
         >
-          Отмена
+          {t.common.cancel}
         </button>
         <button
           type="submit"
           disabled={!ratingValid || submitting}
           className="min-h-11 rounded-xl bg-rose-700 text-sm font-semibold text-white active:bg-rose-800 disabled:opacity-50 sm:rounded-lg sm:px-4 sm:py-2"
         >
-          {submitting ? "Сохранение…" : "Сохранить"}
+          {submitting ? t.common.saving : t.common.save}
         </button>
       </div>
     </form>

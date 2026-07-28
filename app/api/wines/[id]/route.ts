@@ -7,6 +7,7 @@ import { normalizeWineGeo, normalizeWineText } from "@/lib/wineNormalize";
 import { normalizeWineVintage } from "@/lib/wineVintage";
 import { parseDrankRating } from "@/lib/wineDrankRating";
 import { parseVivinoFromRatings } from "@/lib/wineUtils";
+import { getServerDictionary } from "@/lib/i18n/server";
 
 export async function PATCH(
   req: Request,
@@ -16,6 +17,7 @@ export async function PATCH(
   if ("response" in auth) return auth.response;
 
   const { id } = await ctx.params;
+  const { errors } = await getServerDictionary();
 
   // Вино должно принадлежать текущему пользователю.
   const owned = await prisma.wine.findFirst({
@@ -23,7 +25,7 @@ export async function PATCH(
     select: { id: true },
   });
   if (!owned) {
-    return NextResponse.json({ error: "Не найдено" }, { status: 404 });
+    return NextResponse.json({ error: errors.notFound }, { status: 404 });
   }
 
   const body = (await req.json()) as Record<string, unknown>;
@@ -63,7 +65,7 @@ export async function PATCH(
       },
     });
     if (!existing) {
-      return NextResponse.json({ error: "Не найдено" }, { status: 404 });
+      return NextResponse.json({ error: errors.notFound }, { status: 404 });
     }
 
     const readGeo = (key: "country" | "countryCode" | "region" | "subregion" | "grape") => {
@@ -126,7 +128,7 @@ export async function PATCH(
     } else {
       const parsed = parseDrankRating(body.drankRating);
       if (parsed === null) {
-        return NextResponse.json({ error: "Некорректная оценка (0–10)" }, { status: 400 });
+        return NextResponse.json({ error: errors.invalidRating }, { status: 400 });
       }
       data.drankRating = parsed;
     }
@@ -192,7 +194,7 @@ export async function PATCH(
   }
 
   if (Object.keys(data).length === 0) {
-    return NextResponse.json({ error: "Пустое тело запроса" }, { status: 400 });
+    return NextResponse.json({ error: errors.emptyBody }, { status: 400 });
   }
 
   try {
@@ -202,7 +204,7 @@ export async function PATCH(
     });
     return NextResponse.json(toWineJson(updated));
   } catch {
-    return NextResponse.json({ error: "Не найдено" }, { status: 404 });
+    return NextResponse.json({ error: errors.notFound }, { status: 404 });
   }
 }
 
@@ -214,12 +216,13 @@ export async function DELETE(
   if ("response" in auth) return auth.response;
 
   const { id } = await ctx.params;
+  const { errors } = await getServerDictionary();
 
   const { count } = await prisma.wine.deleteMany({
     where: { id, userId: auth.session.userId },
   });
   if (count === 0) {
-    return NextResponse.json({ error: "Не найдено" }, { status: 404 });
+    return NextResponse.json({ error: errors.notFound }, { status: 404 });
   }
   return NextResponse.json({ ok: true });
 }

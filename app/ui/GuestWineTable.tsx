@@ -14,6 +14,7 @@ import {
   formatWineYear,
 } from "@/lib/wines";
 import { countryCodeToFlagEmoji } from "@/lib/wineUtils";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 import { CountryTruncate, TruncateWithTooltip } from "./TruncateWithTooltip";
 import { WineMobileList } from "./WineMobileList";
 import {
@@ -87,6 +88,7 @@ export function GuestWineTable(props: WineTableProps) {
 function GuestWineTableContent(props: WineTableProps) {
   const onRowLeave = useWineRowMouseLeaveHandler();
   const onTableLeave = useWineTableMouseLeaveHandler();
+  const { t, fmt } = useI18n();
   const { wines, variant = "collection" } = props;
   const showActions =
     variant !== "guest" && (props.showActions ?? true) && props.onToggleDrank;
@@ -96,7 +98,7 @@ function GuestWineTableContent(props: WineTableProps) {
   if (wines.length === 0) {
     return (
       <div className="px-4 py-10 text-center text-sm text-zinc-500">
-        Пусто
+        {t.common.empty}
       </div>
     );
   }
@@ -142,41 +144,41 @@ function GuestWineTableContent(props: WineTableProps) {
           <tr className="[&>th]:align-bottom [&>th]:px-0.5 [&>th]:py-0.5 sm:[&>th]:px-1 sm:[&>th]:py-1">
             {variant === "guest" ? (
               <>
-                <th className="whitespace-normal">Название</th>
-                <th className="whitespace-normal">Производитель</th>
-                <th className="whitespace-nowrap">Год</th>
-                <th className="whitespace-normal">Страна</th>
-                <th className="whitespace-normal">Регион</th>
-                <th className="whitespace-normal">Апелласьон</th>
-                <th className="whitespace-normal">Сорт</th>
-                <th className="whitespace-normal">Рейтинг</th>
-                <th className="whitespace-nowrap">Бутылка</th>
-                <th className="whitespace-nowrap">Бокал</th>
+                <th className="whitespace-normal">{t.table.name}</th>
+                <th className="whitespace-normal">{t.table.producer}</th>
+                <th className="whitespace-nowrap">{t.table.year}</th>
+                <th className="whitespace-normal">{t.table.country}</th>
+                <th className="whitespace-normal">{t.table.region}</th>
+                <th className="whitespace-normal">{t.table.appellation}</th>
+                <th className="whitespace-normal">{t.table.grape}</th>
+                <th className="whitespace-normal">{t.table.rating}</th>
+                <th className="whitespace-nowrap">{t.table.bottle}</th>
+                <th className="whitespace-nowrap">{t.table.glass}</th>
               </>
             ) : (
               <>
-                <th className="whitespace-nowrap">Дата</th>
-                <th className="whitespace-normal">Название</th>
-                <th className="whitespace-normal">Производитель</th>
-                <th className="whitespace-nowrap">Год</th>
-                <th className="whitespace-normal">Страна</th>
-                <th className="whitespace-normal">Регион</th>
-                <th className="whitespace-normal">Апелласьон</th>
-                <th className="whitespace-normal">Сорт</th>
-                <th className="whitespace-normal">Рейтинг</th>
-                <th className="whitespace-nowrap">Покупка</th>
-                <th className="whitespace-nowrap">Израиль</th>
-                <th className="whitespace-nowrap">Оригинал</th>
-                <th className="whitespace-nowrap">Кол.</th>
+                <th className="whitespace-nowrap">{t.table.date}</th>
+                <th className="whitespace-normal">{t.table.name}</th>
+                <th className="whitespace-normal">{t.table.producer}</th>
+                <th className="whitespace-nowrap">{t.table.year}</th>
+                <th className="whitespace-normal">{t.table.country}</th>
+                <th className="whitespace-normal">{t.table.region}</th>
+                <th className="whitespace-normal">{t.table.appellation}</th>
+                <th className="whitespace-normal">{t.table.grape}</th>
+                <th className="whitespace-normal">{t.table.rating}</th>
+                <th className="whitespace-nowrap">{t.table.purchase}</th>
+                <th className="whitespace-nowrap">{t.table.israel}</th>
+                <th className="whitespace-nowrap">{t.table.origin}</th>
+                <th className="whitespace-nowrap">{t.table.quantityShort}</th>
                 {guestSelect ? (
                   <>
-                    <th className="whitespace-nowrap px-0.5">Гости</th>
-                    <th className="whitespace-nowrap px-1">Бут.</th>
+                    <th className="whitespace-nowrap px-0.5">{t.table.guests}</th>
+                    <th className="whitespace-nowrap px-1">{t.table.bottleShort}</th>
                     <th
                       className="whitespace-nowrap px-1"
-                      title="Пусто — только бутылка. Иначе авто: бутылка ÷ 5 + 4"
+                      title={t.table.glassAutoHint}
                     >
-                      Бок.
+                      {t.table.glassShort}
                     </th>
                   </>
                 ) : null}
@@ -292,7 +294,7 @@ function GuestWineTableContent(props: WineTableProps) {
                   outOfStock ? (
                     <>
                       <td colSpan={3} className={`${rowCell} text-[10px] text-zinc-500 sm:text-[11px]`}>
-                        Нет в наличии
+                        {t.table.outOfStock}
                       </td>
                     </>
                   ) : (
@@ -306,7 +308,7 @@ function GuestWineTableContent(props: WineTableProps) {
                               guestSelect.onDraftChange(w.id, { selected: e.target.checked })
                             }
                             className="size-3.5 rounded border-zinc-300 text-rose-700 focus:ring-rose-500"
-                            aria-label={`Включить ${w.name} в гостевую карту`}
+                            aria-label={fmt(t.table.includeInGuest, { name: w.name })}
                           />
                         </div>
                       </td>
@@ -320,7 +322,7 @@ function GuestWineTableContent(props: WineTableProps) {
                           }
                           disabled={!(draft?.selected ?? false)}
                           placeholder="—"
-                          title={rowInvalid ? "Укажите цену" : undefined}
+                          title={rowInvalid ? t.table.enterPrice : undefined}
                           className={[
                             inputClass,
                             rowInvalid ? "border-red-400 bg-red-50" : "",
@@ -341,9 +343,9 @@ function GuestWineTableContent(props: WineTableProps) {
                             }
                             disabled={!(draft?.selected ?? false)}
                             placeholder={
-                              draft?.glassPriceManual ? "—" : "авто"
+                              draft?.glassPriceManual ? "—" : t.table.auto
                             }
-                            title="Очистите поле, если вино не разливают по бокалам"
+                            title={t.table.glassClearHint}
                             className={inputClass}
                           />
                           {draft?.glassPriceManual &&
@@ -359,7 +361,7 @@ function GuestWineTableContent(props: WineTableProps) {
                               }
                               className="text-[9px] font-medium leading-none text-rose-700 hover:underline"
                             >
-                              по формуле
+                              {t.table.byFormula}
                             </button>
                           ) : null}
                         </div>
@@ -376,7 +378,7 @@ function GuestWineTableContent(props: WineTableProps) {
                         onClick={() => void props.onToggleDrank!(w.id, !w.drank)}
                         className="inline-flex items-center justify-center rounded px-0.5 text-[10px] font-semibold text-rose-700 hover:bg-rose-50 sm:text-[11px]"
                       >
-                        {w.drank ? "Вернуть" : "Выпить"}
+                        {w.drank ? t.common.restore : t.common.drink}
                       </button>
                     </div>
                   </td>

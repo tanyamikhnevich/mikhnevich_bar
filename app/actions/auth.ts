@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { createSession, destroySession } from "@/lib/auth/session";
+import { getServerDictionary } from "@/lib/i18n/server";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -14,13 +15,14 @@ export async function login(
   _prev: LoginState,
   formData: FormData,
 ): Promise<LoginState> {
+  const { errors } = await getServerDictionary();
   const email = String(formData.get("email") ?? "")
     .trim()
     .toLowerCase();
   const password = String(formData.get("password") ?? "");
 
   if (!email || !password) {
-    return { error: "Введите email и пароль" };
+    return { error: errors.enterEmailPassword };
   }
 
   const user = await prisma.user.findUnique({ where: { email } });
@@ -30,7 +32,7 @@ export async function login(
     user != null && (await verifyPassword(password, user.passwordHash));
 
   if (!user || !ok) {
-    return { error: "Неверный email или пароль" };
+    return { error: errors.invalidCredentials };
   }
 
   await createSession({ id: user.id, email: user.email });
@@ -41,6 +43,7 @@ export async function register(
   _prev: RegisterState,
   formData: FormData,
 ): Promise<RegisterState> {
+  const { errors } = await getServerDictionary();
   const email = String(formData.get("email") ?? "")
     .trim()
     .toLowerCase();
@@ -49,21 +52,21 @@ export async function register(
 
   // Валидация на сервере — не доверяем клиенту, даже если кнопка была заблокирована.
   if (!email || !password) {
-    return { error: "Введите email и пароль" };
+    return { error: errors.enterEmailPassword };
   }
   if (!EMAIL_RE.test(email)) {
-    return { error: "Некорректный email" };
+    return { error: errors.invalidEmail };
   }
   if (password.length < 8) {
-    return { error: "Пароль должен быть не короче 8 символов" };
+    return { error: errors.passwordMin8 };
   }
   if (password !== confirmPassword) {
-    return { error: "Пароли не совпадают" };
+    return { error: errors.passwordsNoMatch };
   }
 
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
-    return { error: "Пользователь с таким email уже существует" };
+    return { error: errors.userExists };
   }
 
   const passwordHash = await hashPassword(password);

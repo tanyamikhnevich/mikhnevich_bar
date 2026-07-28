@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyPassword } from "@/lib/auth/password";
 import { signSessionToken, SESSION_MAX_AGE_SEC } from "@/lib/auth/token";
+import { getServerDictionary } from "@/lib/i18n/server";
 
 /**
  * Логин для API-клиентов (нативное iOS-приложение).
@@ -10,11 +11,12 @@ import { signSessionToken, SESSION_MAX_AGE_SEC } from "@/lib/auth/token";
  *   Authorization: Bearer <token>
  */
 export async function POST(req: Request) {
+  const { errors } = await getServerDictionary();
   let body: { email?: unknown; password?: unknown };
   try {
     body = (await req.json()) as { email?: unknown; password?: unknown };
   } catch {
-    return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
+    return NextResponse.json({ error: errors.invalidJson }, { status: 400 });
   }
 
   const email = String(body.email ?? "")
@@ -24,7 +26,7 @@ export async function POST(req: Request) {
 
   if (!email || !password) {
     return NextResponse.json(
-      { error: "Нужны email и password" },
+      { error: errors.needEmailPassword },
       { status: 400 },
     );
   }
@@ -37,7 +39,7 @@ export async function POST(req: Request) {
 
   if (!user || !ok) {
     return NextResponse.json(
-      { error: "Неверный email или пароль" },
+      { error: errors.invalidCredentials },
       { status: 401 },
     );
   }

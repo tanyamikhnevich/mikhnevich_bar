@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { Wine } from "@/lib/wines";
 import {
   displayRatings,
@@ -53,20 +54,6 @@ function TableCellWrap({
   );
 }
 
-function confirmRestore(wine: Wine): boolean {
-  const label = wine.name?.trim() || "эту запись";
-  return window.confirm(`Вы уверены, что хотите вернуть «${label}» в коллекцию?`);
-}
-
-function handleRestoreClick(
-  wine: Wine,
-  onRestore?: (wine: Wine) => void | Promise<void>,
-) {
-  if (!onRestore) return;
-  if (!confirmRestore(wine)) return;
-  void onRestore(wine);
-}
-
 export function DrankWineTable({
   wines,
   onRestore,
@@ -84,10 +71,11 @@ export function DrankWineTable({
     rating: number | null;
     notes: string | null;
   } | null>(null);
+  const { t } = useI18n();
 
   if (wines.length === 0) {
     return (
-      <div className="px-4 py-10 text-center text-sm text-zinc-500">Пусто</div>
+      <div className="px-4 py-10 text-center text-sm text-zinc-500">{t.common.empty}</div>
     );
   }
 
@@ -128,20 +116,20 @@ export function DrankWineTable({
             </colgroup>
             <thead className="bg-zinc-50 text-center text-[10px] font-semibold text-zinc-600 sm:text-[11px]">
               <tr className="[&>th]:align-bottom [&>th]:px-0.5 [&>th]:py-0.5 sm:[&>th]:px-1 sm:[&>th]:py-1">
-                <th className="whitespace-nowrap">Когда</th>
-                <th className="whitespace-normal">Название</th>
-                <th className="whitespace-normal">Производитель</th>
-                <th className="whitespace-nowrap">Год</th>
-                <th className="whitespace-normal">Страна</th>
-                <th className="whitespace-normal">Регион</th>
-                <th className="whitespace-normal">Апелласьон</th>
-                <th className="whitespace-normal">Сорт</th>
-                <th className="whitespace-normal">Рейтинг</th>
-                <th className="whitespace-nowrap">Покупка</th>
-                <th className="whitespace-nowrap">Израиль</th>
-                <th className="whitespace-nowrap">Оригинал</th>
-                <th className="whitespace-normal">Оценка</th>
-                <th className="whitespace-normal">Заметки</th>
+                <th className="whitespace-nowrap">{t.table.when}</th>
+                <th className="whitespace-normal">{t.table.name}</th>
+                <th className="whitespace-normal">{t.table.producer}</th>
+                <th className="whitespace-nowrap">{t.table.year}</th>
+                <th className="whitespace-normal">{t.table.country}</th>
+                <th className="whitespace-normal">{t.table.region}</th>
+                <th className="whitespace-normal">{t.table.appellation}</th>
+                <th className="whitespace-normal">{t.table.grape}</th>
+                <th className="whitespace-normal">{t.table.rating}</th>
+                <th className="whitespace-nowrap">{t.table.purchase}</th>
+                <th className="whitespace-nowrap">{t.table.israel}</th>
+                <th className="whitespace-nowrap">{t.table.origin}</th>
+                <th className="whitespace-normal">{t.table.score}</th>
+                <th className="whitespace-normal">{t.table.notes}</th>
                 <th></th>
               </tr>
             </thead>
@@ -186,9 +174,16 @@ function DrankWineDesktopRow({
   onEdit?: () => void;
 }) {
   const onRowLeave = useWineRowMouseLeaveHandler();
+  const { t, fmt } = useI18n();
   const flag = countryCodeToFlagEmoji(wine.countryCode);
   const display = drankDisplayFromExcel(wine, EXCEL_META_BY_ROW);
   const ratingsText = displayRatings(wine);
+  const restore = () => {
+    if (!onRestore) return;
+    const label = wine.name?.trim() || t.table.thisRecord;
+    if (!window.confirm(fmt(t.table.confirmRestore, { name: label }))) return;
+    void onRestore(wine);
+  };
 
   return (
     <tr className={`${ROW_H} group hover:bg-zinc-50/80`} onMouseLeave={onRowLeave}>
@@ -272,16 +267,16 @@ function DrankWineDesktopRow({
               onClick={onEdit}
               className="whitespace-nowrap rounded px-0.5 py-0.5 text-[10px] font-medium text-zinc-700 hover:bg-zinc-100 sm:px-1 sm:text-[11px]"
             >
-              Изменить
+              {t.common.edit}
             </button>
           ) : null}
           {onRestore ? (
             <button
               type="button"
-              onClick={() => handleRestoreClick(wine, onRestore)}
+              onClick={restore}
               className="whitespace-nowrap rounded px-0.5 py-0.5 text-[10px] font-medium text-emerald-800 hover:bg-emerald-50 sm:px-1 sm:text-[11px]"
             >
-              Вернуть
+              {t.common.restore}
             </button>
           ) : null}
         </div>
@@ -299,8 +294,15 @@ function DrankWineMobileRow({
   onRestore?: (wine: Wine) => void | Promise<void>;
   onEdit?: () => void;
 }) {
+  const { t, fmt } = useI18n();
   const display = drankDisplayFromExcel(wine, EXCEL_META_BY_ROW);
   const ratingsText = displayRatings(wine);
+  const restore = () => {
+    if (!onRestore) return;
+    const label = wine.name?.trim() || t.table.thisRecord;
+    if (!window.confirm(fmt(t.table.confirmRestore, { name: label }))) return;
+    void onRestore(wine);
+  };
 
   return (
     <article className="px-4 py-3 text-sm">
@@ -319,48 +321,48 @@ function DrankWineMobileRow({
               onClick={onEdit}
               className="rounded-lg border border-zinc-200 px-2 py-1 text-xs font-medium text-zinc-800"
             >
-              Изменить
+              {t.common.edit}
             </button>
           ) : null}
           {onRestore ? (
             <button
               type="button"
-              onClick={() => handleRestoreClick(wine, onRestore)}
+              onClick={restore}
               className="rounded-lg border border-emerald-200 px-2 py-1 text-xs font-medium text-emerald-800"
             >
-              Вернуть
+              {t.common.restore}
             </button>
           ) : null}
         </div>
       </div>
       <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-zinc-600">
         <div>
-          <dt className="text-zinc-400">Когда</dt>
+          <dt className="text-zinc-400">{t.table.when}</dt>
           <dd>
             {wine.drankAt ? formatDateRU(wine.drankAt.slice(0, 10)) : "—"}
           </dd>
         </div>
         <div>
-          <dt className="text-zinc-400">Моя оценка</dt>
+          <dt className="text-zinc-400">{t.table.myScoreLabel}</dt>
           <dd>
             {display.rating != null ? formatDrankRating(display.rating) : "—"}
           </dd>
         </div>
         {wine.region ? (
           <div>
-            <dt className="text-zinc-400">Регион</dt>
+            <dt className="text-zinc-400">{t.table.region}</dt>
             <dd>{wine.region}</dd>
           </div>
         ) : null}
         {ratingsText ? (
           <div>
-            <dt className="text-zinc-400">Рейтинг</dt>
+            <dt className="text-zinc-400">{t.table.ratingLabel}</dt>
             <dd>{ratingsText}</dd>
           </div>
         ) : null}
         {display.notes ? (
           <div className="col-span-2">
-            <dt className="text-zinc-400">Заметки</dt>
+            <dt className="text-zinc-400">{t.table.notes}</dt>
             <dd className="text-zinc-700">{display.notes}</dd>
           </div>
         ) : null}

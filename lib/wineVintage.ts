@@ -6,6 +6,9 @@
  *   в БД и в таблице всегда каноническое **`N.V.`**, не null и не «—».
  */
 
+import { interpolate } from "./i18n/config";
+import type { Dictionary } from "./i18n/dictionaries";
+
 export const WINE_VINTAGE_NV = "N.V." as const;
 
 const NV_PATTERN = /^(n\.?\s*v\.?|nas|n\/a)$/i;
@@ -49,10 +52,13 @@ export function parseVintageFromFormInput(raw: string): string | null {
 }
 
 /** Сообщение об ошибке для поля «год» в форме; null — ок. */
-export function getWineYearInputError(raw: string): string | null {
-  if (!raw.trim()) return "Укажите год или нажмите N.V.";
+export function getWineYearInputError(
+  raw: string,
+  t: Dictionary["form"],
+): string | null {
+  if (!raw.trim()) return t.yearOrPressNv;
   if (parseVintageFromFormInput(raw) == null) {
-    return `Число 1800–2100 или ${WINE_VINTAGE_NV}`;
+    return interpolate(t.yearNumberOrNv, { nv: WINE_VINTAGE_NV });
   }
   return null;
 }

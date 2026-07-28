@@ -3,6 +3,7 @@ import { prisma } from "../../../../../lib/prisma";
 import { requireApiSession } from "../../../../../lib/auth/dal";
 import { toWineJson } from "../../../../../lib/mapWineJson";
 import { wineIdentityWhere } from "../../../../../lib/wineRecord";
+import { getServerDictionary } from "../../../../../lib/i18n/server";
 
 export async function POST(
   _req: Request,
@@ -12,15 +13,16 @@ export async function POST(
   if ("response" in auth) return auth.response;
 
   const { id } = await ctx.params;
+  const { errors } = await getServerDictionary();
 
   const wine = await prisma.wine.findFirst({
     where: { id, userId: auth.session.userId },
   });
   if (!wine) {
-    return NextResponse.json({ error: "Не найдено" }, { status: 404 });
+    return NextResponse.json({ error: errors.notFound }, { status: 404 });
   }
   if (!wine.drank) {
-    return NextResponse.json({ error: "Вино не в разделе «Выпито»" }, { status: 400 });
+    return NextResponse.json({ error: errors.notInDrunk }, { status: 400 });
   }
 
   try {
@@ -61,6 +63,6 @@ export async function POST(
       mode: "restored" as const,
     });
   } catch {
-    return NextResponse.json({ error: "Не удалось вернуть в коллекцию" }, { status: 500 });
+    return NextResponse.json({ error: errors.restoreFailed }, { status: 500 });
   }
 }

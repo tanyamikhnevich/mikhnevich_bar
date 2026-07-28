@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "./session";
 import type { SessionPayload } from "./token";
+import { getServerDictionary } from "../i18n/server";
 
 /**
  * Data Access Layer для авторизации.
@@ -22,8 +23,9 @@ export async function requireApiSession(): Promise<
 > {
   const session = await getSession();
   if (!session) {
+    const { errors } = await getServerDictionary();
     return {
-      response: NextResponse.json({ error: "Требуется вход" }, { status: 401 }),
+      response: NextResponse.json({ error: errors.authRequired }, { status: 401 }),
     };
   }
   return { session };

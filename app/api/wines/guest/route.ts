@@ -6,6 +6,7 @@ import {
   validateGuestWineUpdates,
 } from "../../../../lib/guestWineApi";
 import { requireApiSession } from "../../../../lib/auth/dal";
+import { getServerDictionary } from "../../../../lib/i18n/server";
 
 /** Гостевой список конкретного пользователя. */
 function guestListWhere(userId: string) {
@@ -61,15 +62,16 @@ export async function PUT(req: Request) {
   const auth = await requireApiSession();
   if ("response" in auth) return auth.response;
 
+  const { errors } = await getServerDictionary();
   const items = parseItems(await req.json());
   if (!items) {
-    return NextResponse.json({ error: "Нужен массив items" }, { status: 400 });
+    return NextResponse.json({ error: errors.itemsArrayRequired }, { status: 400 });
   }
 
   const validation = validateGuestWineUpdates(items);
   if (!validation.ok) {
     return NextResponse.json(
-      { error: validation.message, wineIds: validation.wineIds },
+      { error: errors.guestBottlePriceRequired, wineIds: validation.wineIds },
       { status: 400 },
     );
   }
@@ -84,7 +86,7 @@ export async function PUT(req: Request) {
   const qtyById = new Map(existing.map((w) => [w.id, w.quantity]));
 
   if (existing.length !== ids.length) {
-    return NextResponse.json({ error: "Некоторые вина не найдены" }, { status: 404 });
+    return NextResponse.json({ error: errors.someWinesNotFound }, { status: 404 });
   }
 
   if (items.length === 0) {
