@@ -1,6 +1,8 @@
 "use client";
 
 import { Fragment, useState, type ReactNode } from "react";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import { useWineSelection } from "./WineSelectionContext";
 import type { Wine } from "@/lib/wines";
 import {
   displayNotes,
@@ -62,13 +64,6 @@ const COL_PCT_Drank = [
 ] as const;
 
 type WineTableVariant = "collection" | "drank";
-
-function confirmRestore(wine: Wine): boolean {
-  const label = wine.name?.trim() || "эту запись";
-  return window.confirm(
-    `Вы уверены, что хотите вернуть «${label}» в коллекцию?`,
-  );
-}
 
 function PencilIcon() {
   return (
@@ -181,6 +176,7 @@ export function WineTable({
   onDelete?: (wine: Wine) => void | Promise<void>;
   onCopy?: (wine: Wine) => void;
 }) {
+  const { t, fmt } = useI18n();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -188,7 +184,7 @@ export function WineTable({
   if (wines.length === 0) {
     return (
       <div className="px-4 py-10 text-center text-sm text-zinc-500">
-        Пусто
+        {t.common.empty}
       </div>
     );
   }
@@ -204,8 +200,8 @@ export function WineTable({
 
   const handleDelete = async (wine: Wine) => {
     if (!onDelete) return;
-    const label = wine.name?.trim() || "эту запись";
-    if (!window.confirm(`Удалить «${label}» из базы? Это действие нельзя отменить.`)) {
+    const label = wine.name?.trim() || t.table.thisRecord;
+    if (!window.confirm(fmt(t.table.confirmDelete, { name: label }))) {
       return;
     }
     setDeletingId(wine.id);
@@ -219,7 +215,8 @@ export function WineTable({
 
   const handleRestore = async (wine: Wine) => {
     if (!onRestore) return;
-    if (!confirmRestore(wine)) return;
+    const label = wine.name?.trim() || t.table.thisRecord;
+    if (!window.confirm(fmt(t.table.confirmRestore, { name: label }))) return;
     await onRestore(wine);
   };
 
@@ -305,6 +302,7 @@ function WineTableDesktop({
   rowCellClass: string;
 }) {
   const onTableLeave = useWineTableMouseLeaveHandler();
+  const { t } = useI18n();
 
   return (
       <table
@@ -322,26 +320,26 @@ function WineTableDesktop({
         <thead className="bg-zinc-50 text-center text-[10px] font-semibold text-zinc-600 sm:text-[11px]">
           <tr className="[&>th]:align-bottom [&>th]:px-0.5 [&>th]:py-0.5 sm:[&>th]:px-1 sm:[&>th]:py-1">
             <th className="whitespace-nowrap">
-              {variant === "drank" ? "Когда" : "Дата"}
+              {variant === "drank" ? t.table.when : t.table.date}
             </th>
-            <th className="whitespace-normal">Название</th>
-            <th className="whitespace-normal">Производитель</th>
-            <th className="whitespace-nowrap pr-2 sm:pr-3">Год</th>
-            <th className="whitespace-normal pl-2 sm:pl-3">Страна</th>
-            <th className="whitespace-normal">Регион</th>
-            <th className="whitespace-normal">Апелласьон</th>
-            <th className="whitespace-normal">Сорт</th>
-            <th className="whitespace-normal">Рейтинг</th>
-            <th className="whitespace-nowrap">Покупка</th>
-            <th className="whitespace-nowrap">Израиль</th>
-            <th className="whitespace-nowrap">Оригинал</th>
+            <th className="whitespace-normal">{t.table.name}</th>
+            <th className="whitespace-normal">{t.table.producer}</th>
+            <th className="whitespace-nowrap pr-2 sm:pr-3">{t.table.year}</th>
+            <th className="whitespace-normal pl-2 sm:pl-3">{t.table.country}</th>
+            <th className="whitespace-normal">{t.table.region}</th>
+            <th className="whitespace-normal">{t.table.appellation}</th>
+            <th className="whitespace-normal">{t.table.grape}</th>
+            <th className="whitespace-normal">{t.table.rating}</th>
+            <th className="whitespace-nowrap">{t.table.purchase}</th>
+            <th className="whitespace-nowrap">{t.table.israel}</th>
+            <th className="whitespace-nowrap">{t.table.origin}</th>
             {variant === "drank" ? (
               <>
-                <th className="whitespace-normal">Оценка</th>
-                <th className="whitespace-normal">Заметки</th>
+                <th className="whitespace-normal">{t.table.score}</th>
+                <th className="whitespace-normal">{t.table.notes}</th>
               </>
             ) : (
-              <th className="whitespace-normal">Количество</th>
+              <th className="whitespace-normal">{t.table.quantity}</th>
             )}
             {showActions ? <th className="whitespace-nowrap"></th> : null}
           </tr>
@@ -411,6 +409,8 @@ function WineTableTbody({
   handleDelete: (wine: Wine) => Promise<void>;
 }) {
   const onRowLeave = useWineRowMouseLeaveHandler();
+  const { t } = useI18n();
+  const selection = useWineSelection();
 
   return (
         <tbody className="divide-y divide-zinc-100 text-zinc-800">
@@ -436,11 +436,33 @@ function WineTableTbody({
                   : "—"
                 : formatDateRU(w.purchaseDate);
 
+            const selected = selection.active && selection.isSelected(w.id);
+
             return (
               <Fragment key={w.id}>
-                <tr className={ROW_H} onMouseLeave={onRowLeave}>
+                <tr
+                  className={[
+                    ROW_H,
+                    selection.active ? "cursor-pointer" : "",
+                    selected ? "bg-rose-50" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                  onMouseLeave={onRowLeave}
+                  onClick={
+                    selection.active ? () => selection.toggle(w.id) : undefined
+                  }
+                >
                   <td className={`${cellCenter} ${rowCellClass} whitespace-nowrap text-zinc-600`}>
                     <div className="flex h-full items-center justify-center">
+                      {selection.active ? (
+                        <span
+                          className={`mr-1 ${selected ? "text-rose-700" : "text-zinc-300"}`}
+                          aria-hidden
+                        >
+                          {selected ? "✓" : "○"}
+                        </span>
+                      ) : null}
                       {dateLabel}
                     </div>
                   </td>
@@ -537,7 +559,7 @@ function WineTableTbody({
                               disabled={isBusy}
                               className="inline-flex items-center justify-center rounded px-0.5 py-0.5 text-[10px] font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-40 sm:px-1 sm:text-[11px]"
                             >
-                              Вернуть
+                              {t.common.restore}
                             </button>
                           ) : null
                         ) : onDrink ? (
@@ -547,12 +569,12 @@ function WineTableTbody({
                             disabled={isBusy || isEditing}
                             className="inline-flex items-center justify-center rounded px-0.5 py-0.5 text-[10px] font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-40 sm:px-1 sm:text-[11px]"
                           >
-                            Выпить
+                            {t.common.drink}
                           </button>
                         ) : null}
                         {onUpdate && !isEditing ? (
                           <IconButton
-                            title="Редактировать"
+                            title={t.common.edit}
                             disabled={isBusy}
                             onClick={() => setEditingId(w.id)}
                             className="text-zinc-500 hover:bg-zinc-100 hover:text-rose-700"
@@ -562,7 +584,7 @@ function WineTableTbody({
                         ) : null}
                         {onCopy ? (
                           <IconButton
-                            title="Скопировать как новое вино в коллекцию"
+                            title={t.table.copyAsNew}
                             disabled={isBusy}
                             onClick={() => onCopy(w)}
                             className="text-zinc-500 hover:bg-zinc-100 hover:text-rose-700"
@@ -572,7 +594,7 @@ function WineTableTbody({
                         ) : null}
                         {onDelete ? (
                           <IconButton
-                            title="Удалить"
+                            title={t.common.delete}
                             disabled={isBusy}
                             onClick={() => void handleDelete(w)}
                             className="text-zinc-500 hover:bg-red-50 hover:text-red-700"

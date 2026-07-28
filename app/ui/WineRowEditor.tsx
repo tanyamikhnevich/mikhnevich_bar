@@ -24,6 +24,7 @@ import {
   type DrankExcelMetaEntry,
 } from "../../lib/myWinesXlsxDrankMeta";
 import drankExcelMetaFile from "../../data/drank-excel-meta.json";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 const EXCEL_META_BY_ROW = drankExcelMetaFile.byRow as Record<
   string,
@@ -68,6 +69,7 @@ export function WineRowEditor({
   saving?: boolean;
   variant?: "collection" | "drank";
 }) {
+  const { t } = useI18n();
   const canonicalCountries = useMemo(() => getCanonicalCountries(), []);
 
   const countryOptions = useMemo(() => {
@@ -100,8 +102,8 @@ export function WineRowEditor({
     resolveFormGeo(form);
 
   const validationError = useMemo(
-    () => validateWineForm(form, resolvedCountry, resolvedRegion),
-    [form, resolvedCountry, resolvedRegion],
+    () => validateWineForm(form, resolvedCountry, resolvedRegion, t.form),
+    [form, resolvedCountry, resolvedRegion, t.form],
   );
 
   const patch = (partial: Partial<WineFormState>) => {
@@ -156,7 +158,7 @@ export function WineRowEditor({
       className="rounded-lg border border-rose-100 bg-rose-50/40 p-3"
       onSubmit={(e) => {
         e.preventDefault();
-        const err = validateWineForm(form, resolvedCountry, resolvedRegion);
+        const err = validateWineForm(form, resolvedCountry, resolvedRegion, t.form);
         if (err) {
           setSubmitError(err);
           return;
@@ -171,41 +173,41 @@ export function WineRowEditor({
       }}
     >
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-        <Field label="Название *">
+        <Field label={t.rowEditor.name}>
           <input
             className={inputClass}
             value={form.name}
             onChange={(e) => patch({ name: e.target.value })}
           />
         </Field>
-        <Field label="Производитель *">
+        <Field label={t.rowEditor.producer}>
           <input
             className={inputClass}
             value={form.producer}
             onChange={(e) => patch({ producer: e.target.value })}
           />
         </Field>
-        <Field label="Цвет *">
+        <Field label={t.rowEditor.color}>
           <select
             className={selectClass}
             value={form.color}
             onChange={(e) => patch({ color: e.target.value as WineColor })}
           >
-            <option value="red">Красное</option>
-            <option value="white">Белое</option>
-            <option value="rose">Розовое</option>
-            <option value="sparkling">Игристое</option>
+            <option value="red">{t.colors.red}</option>
+            <option value="white">{t.colors.white}</option>
+            <option value="rose">{t.colors.rose}</option>
+            <option value="sparkling">{t.colors.sparkling}</option>
           </select>
         </Field>
-        <Field label="Год *">
+        <Field label={t.rowEditor.year}>
           <input
             className={inputClass}
             value={form.year}
             onChange={(e) => patch({ year: e.target.value })}
-            placeholder="2021 или N.V."
+            placeholder={t.rowEditor.yearPlaceholder}
           />
         </Field>
-        <Field label="Страна *">
+        <Field label={t.rowEditor.country}>
           <select
             className={selectClass}
             value={form.countrySelect}
@@ -223,18 +225,18 @@ export function WineRowEditor({
                 {name}
               </option>
             ))}
-            <option value={WINE_COUNTRY_OTHER_VALUE}>Другое</option>
+            <option value={WINE_COUNTRY_OTHER_VALUE}>{t.common.other}</option>
           </select>
           {isCountryOther ? (
             <input
               className={`${inputClass} mt-1`}
               value={form.countryOther}
               onChange={(e) => patch({ countryOther: e.target.value })}
-              placeholder="Страна"
+              placeholder={t.rowEditor.countryPlaceholder}
             />
           ) : null}
         </Field>
-        <Field label="Регион *">
+        <Field label={t.rowEditor.region}>
           {isCountryOther ? (
             <input
               className={inputClass}
@@ -242,7 +244,7 @@ export function WineRowEditor({
               onChange={(e) => patch({ regionOther: e.target.value })}
             />
           ) : !resolvedCountry ? (
-            <input className={inputClass} disabled placeholder="Страна" />
+            <input className={inputClass} disabled placeholder={t.rowEditor.countryPlaceholder} />
           ) : (
             <>
               <select
@@ -259,7 +261,7 @@ export function WineRowEditor({
                     {r}
                   </option>
                 ))}
-                <option value={WINE_REGION_OTHER_VALUE}>Другое</option>
+                <option value={WINE_REGION_OTHER_VALUE}>{t.common.other}</option>
               </select>
               {isRegionOther ? (
                 <input
@@ -271,14 +273,14 @@ export function WineRowEditor({
             </>
           )}
         </Field>
-        <Field label="Апелласьон">
+        <Field label={t.rowEditor.appellation}>
           <input
             className={inputClass}
             value={form.subregion}
             onChange={(e) => patch({ subregion: e.target.value })}
           />
         </Field>
-        <Field label="Сорт">
+        <Field label={t.rowEditor.grape}>
           <input
             className={inputClass}
             value={form.grape}
@@ -307,7 +309,7 @@ export function WineRowEditor({
             />
           </div>
         </Field>
-        <Field label="Кол-во *">
+        <Field label={t.rowEditor.quantity}>
           <input
             className={inputClass}
             inputMode="numeric"
@@ -315,7 +317,7 @@ export function WineRowEditor({
             onChange={(e) => patch({ quantity: e.target.value })}
           />
         </Field>
-        <Field label="Покупка *">
+        <Field label={t.rowEditor.purchase}>
           <input
             className={inputClass}
             inputMode="decimal"
@@ -323,7 +325,7 @@ export function WineRowEditor({
             onChange={(e) => patch({ purchasePrice: e.target.value })}
           />
         </Field>
-        <Field label="Вал. покупки *">
+        <Field label={t.rowEditor.purchaseCurrency}>
           <select
             className={selectClass}
             value={form.purchaseCurrencyKey}
@@ -331,10 +333,10 @@ export function WineRowEditor({
           >
             {WINE_CURRENCY_PRESETS.map((p) => (
               <option key={p.key} value={p.key}>
-                {p.label}
+                {t.currencies[p.key]}
               </option>
             ))}
-            <option value={WINE_CURRENCY_OTHER_VALUE}>Другое</option>
+            <option value={WINE_CURRENCY_OTHER_VALUE}>{t.common.other}</option>
           </select>
           {form.purchaseCurrencyKey === WINE_CURRENCY_OTHER_VALUE ? (
             <input
@@ -345,7 +347,7 @@ export function WineRowEditor({
             />
           ) : null}
         </Field>
-        <Field label="Израиль">
+        <Field label={t.rowEditor.israel}>
           <input
             className={inputClass}
             inputMode="decimal"
@@ -353,7 +355,7 @@ export function WineRowEditor({
             onChange={(e) => patch({ israelPrice: e.target.value })}
           />
         </Field>
-        <Field label="Оригинал *">
+        <Field label={t.rowEditor.origin}>
           <input
             className={inputClass}
             inputMode="decimal"
@@ -361,7 +363,7 @@ export function WineRowEditor({
             onChange={(e) => patch({ originPrice: e.target.value })}
           />
         </Field>
-        <Field label="Вал. оригинала *">
+        <Field label={t.rowEditor.originCurrency}>
           <select
             className={selectClass}
             value={form.originCurrencyKey}
@@ -369,10 +371,10 @@ export function WineRowEditor({
           >
             {WINE_CURRENCY_PRESETS.map((p) => (
               <option key={p.key} value={p.key}>
-                {p.label}
+                {t.currencies[p.key]}
               </option>
             ))}
-            <option value={WINE_CURRENCY_OTHER_VALUE}>Другое</option>
+            <option value={WINE_CURRENCY_OTHER_VALUE}>{t.common.other}</option>
           </select>
           {form.originCurrencyKey === WINE_CURRENCY_OTHER_VALUE ? (
             <input
@@ -383,7 +385,7 @@ export function WineRowEditor({
             />
           ) : null}
         </Field>
-        <Field label="Дата покупки *">
+        <Field label={t.rowEditor.purchaseDate}>
           <input
             type="date"
             className={inputClass}
@@ -393,7 +395,7 @@ export function WineRowEditor({
         </Field>
         {variant === "drank" ? (
           <>
-            <Field label="Когда выпили">
+            <Field label={t.rowEditor.drankAt}>
               <input
                 type="date"
                 className={inputClass}
@@ -401,16 +403,16 @@ export function WineRowEditor({
                 onChange={(e) => patch({ drankAt: e.target.value })}
               />
             </Field>
-            <Field label="Моя оценка">
+            <Field label={t.rowEditor.drankRating}>
               <input
                 className={inputClass}
                 inputMode="decimal"
                 value={form.drankRating}
                 onChange={(e) => patch({ drankRating: e.target.value })}
-                placeholder="0–10"
+                placeholder={t.rowEditor.ratingPlaceholder}
               />
             </Field>
-            <Field label="Заметки о вине" className="sm:col-span-2">
+            <Field label={t.rowEditor.drankNotes} className="sm:col-span-2">
               <input
                 className={inputClass}
                 value={form.drankNotes}
@@ -419,7 +421,7 @@ export function WineRowEditor({
             </Field>
           </>
         ) : null}
-        <Field label="Служебная заметка" className="sm:col-span-2">
+        <Field label={t.rowEditor.notes} className="sm:col-span-2">
           <input
             className={inputClass}
             value={form.notes}
@@ -441,14 +443,14 @@ export function WineRowEditor({
           disabled={saving}
           className="rounded border border-zinc-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
         >
-          Отмена
+          {t.common.cancel}
         </button>
         <button
           type="submit"
           disabled={saving || validationError != null}
           className="rounded bg-rose-700 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-rose-800 disabled:cursor-not-allowed disabled:bg-zinc-300"
         >
-          {saving ? "Сохранение…" : "Сохранить"}
+          {saving ? t.common.saving : t.common.save}
         </button>
       </div>
     </form>

@@ -16,6 +16,8 @@ import {
   WINE_COUNTRY_OTHER_VALUE,
   WINE_REGION_OTHER_VALUE,
 } from "./wineNormalize";
+import { interpolate } from "./i18n/config";
+import type { Dictionary } from "./i18n/dictionaries";
 
 export type WineFormState = {
   name: string;
@@ -176,38 +178,39 @@ export function validateWineForm(
   form: WineFormState,
   resolvedCountry: string,
   resolvedRegion: string,
+  t: Dictionary["form"],
 ): string | null {
-  if (!form.name.trim()) return "Укажите название";
-  if (!form.producer.trim()) return "Укажите производителя";
-  if (!form.year.trim()) return "Укажите год или N.V.";
+  if (!form.name.trim()) return t.nameRequired;
+  if (!form.producer.trim()) return t.producerRequired;
+  if (!form.year.trim()) return t.yearOrNv;
   if (parseVintageFromFormInput(form.year) == null) {
-    return `Год: число 1800–2100 или ${WINE_VINTAGE_NV} (нет винтажа)`;
+    return interpolate(t.yearRange, { nv: WINE_VINTAGE_NV });
   }
-  if (!form.countrySelect) return "Выберите страну";
+  if (!form.countrySelect) return t.selectCountry;
   if (form.countrySelect === WINE_COUNTRY_OTHER_VALUE && !form.countryOther.trim()) {
-    return "Укажите название страны";
+    return t.countryNameRequired;
   }
-  if (!resolvedCountry) return "Укажите страну";
-  if (!resolvedRegion) return "Укажите регион";
-  if (!parsePositiveInt(form.quantity)) return "Укажите количество (от 1)";
-  if (parsePositivePrice(form.purchasePrice) == null) return "Укажите цену покупки";
+  if (!resolvedCountry) return t.countryRequired;
+  if (!resolvedRegion) return t.regionRequired;
+  if (!parsePositiveInt(form.quantity)) return t.quantityMin1;
+  if (parsePositivePrice(form.purchasePrice) == null) return t.purchasePriceRequired;
   if (
     !resolveWineCurrencySymbol(
       form.purchaseCurrencyKey,
       form.purchaseCurrencyOther,
     )
   ) {
-    return "Выберите валюту покупки";
+    return t.selectPurchaseCurrency;
   }
   if (parsePositivePrice(form.originPrice) == null) {
-    return "Укажите цену в стране (оригинал)";
+    return t.originPriceRequired;
   }
   if (
     !resolveWineCurrencySymbol(form.originCurrencyKey, form.originCurrencyOther)
   ) {
-    return "Выберите валюту (оригинал)";
+    return t.selectOriginCurrency;
   }
-  if (!form.purchaseDate.trim()) return "Укажите дату покупки";
+  if (!form.purchaseDate.trim()) return t.purchaseDateRequired;
   return null;
 }
 

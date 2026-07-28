@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import type { Dictionary } from "@/lib/i18n/dictionaries";
 import type { NewWineInput, Wine, WineColor } from "@/lib/wines";
 import {
   WINE_CURRENCY_OTHER_VALUE,
@@ -145,23 +147,24 @@ function CurrencyField({
   onKeyChange: (key: string) => void;
   onOtherChange: (text: string) => void;
 }) {
+  const { t } = useI18n();
   const isOther = currencyKey === WINE_CURRENCY_OTHER_VALUE;
   return (
     <Field label={label} required={required}>
       <Select value={currencyKey} onChange={(e) => onKeyChange(e.target.value)}>
         {WINE_CURRENCY_PRESETS.map((p) => (
           <option key={p.key} value={p.key}>
-            {p.label}
+            {t.currencies[p.key]}
           </option>
         ))}
-        <option value={WINE_CURRENCY_OTHER_VALUE}>Другое</option>
+        <option value={WINE_CURRENCY_OTHER_VALUE}>{t.common.other}</option>
       </Select>
       {isOther ? (
         <TextInput
           className="mt-2"
           value={currencyOther}
           onChange={(e) => onOtherChange(e.target.value)}
-          placeholder="Символ или код валюты"
+          placeholder={t.addWine.currencyOtherPlaceholder}
           maxLength={8}
         />
       ) : null}
@@ -173,31 +176,32 @@ function validateForm(
   form: FormState,
   resolvedCountry: string,
   resolvedRegion: string,
+  t: Dictionary["form"],
 ): string | null {
-  if (!form.name.trim()) return "Укажите название";
-  if (!form.producer.trim()) return "Укажите производителя";
-  const yearError = getWineYearInputError(form.year);
+  if (!form.name.trim()) return t.nameRequired;
+  if (!form.producer.trim()) return t.producerRequired;
+  const yearError = getWineYearInputError(form.year, t);
   if (yearError) return yearError;
-  if (!form.countrySelect) return "Выберите страну";
+  if (!form.countrySelect) return t.selectCountry;
   if (form.countrySelect === WINE_COUNTRY_OTHER_VALUE && !form.countryOther.trim()) {
-    return "Укажите название страны";
+    return t.countryNameRequired;
   }
-  if (!resolvedCountry) return "Укажите страну";
-  if (!resolvedRegion) return "Укажите регион";
-  if (!parsePositiveInt(form.quantity)) return "Укажите количество бутылок (от 1)";
-  if (parsePositivePrice(form.purchasePrice) == null) return "Укажите цену покупки";
+  if (!resolvedCountry) return t.countryRequired;
+  if (!resolvedRegion) return t.regionRequired;
+  if (!parsePositiveInt(form.quantity)) return t.quantityBottlesMin1;
+  if (parsePositivePrice(form.purchasePrice) == null) return t.purchasePriceRequired;
   const purchaseCur = resolveWineCurrencySymbol(
     form.purchaseCurrencyKey,
     form.purchaseCurrencyOther,
   );
-  if (!purchaseCur) return "Выберите валюту покупки";
-  if (parsePositivePrice(form.originPrice) == null) return "Укажите цену в стране (оригинал)";
+  if (!purchaseCur) return t.selectPurchaseCurrency;
+  if (parsePositivePrice(form.originPrice) == null) return t.originPriceRequired;
   const originCur = resolveWineCurrencySymbol(
     form.originCurrencyKey,
     form.originCurrencyOther,
   );
-  if (!originCur) return "Выберите валюту (оригинал)";
-  if (!form.purchaseDate.trim()) return "Укажите дату покупки";
+  if (!originCur) return t.selectOriginCurrency;
+  if (!form.purchaseDate.trim()) return t.purchaseDateRequired;
   return null;
 }
 
@@ -213,6 +217,7 @@ export function AddWineModal({
   /** Заполнить форму данными скопированного вина */
   copyFrom?: Wine | null;
 }) {
+  const { t, fmt } = useI18n();
   const [form, setForm] = useState(createEmptyForm);
   const [dbCountries, setDbCountries] = useState<string[]>([]);
   const [regionOptions, setRegionOptions] = useState<string[]>([]);
@@ -244,11 +249,14 @@ export function AddWineModal({
       : form.regionSelect.trim();
 
   const validationError = useMemo(
-    () => validateForm(form, resolvedCountry, resolvedRegion),
-    [form, resolvedCountry, resolvedRegion],
+    () => validateForm(form, resolvedCountry, resolvedRegion, t.form),
+    [form, resolvedCountry, resolvedRegion, t.form],
   );
 
-  const yearError = useMemo(() => getWineYearInputError(form.year), [form.year]);
+  const yearError = useMemo(
+    () => getWineYearInputError(form.year, t.form),
+    [form.year, t.form],
+  );
   const showYearError = yearTouched || submitAttempted;
   const nonYearValidationError = useMemo(() => {
     if (!validationError || validationError === yearError) return null;
@@ -348,19 +356,19 @@ export function AddWineModal({
         <div className="flex shrink-0 items-start justify-between gap-4 border-b border-zinc-200 px-5 py-4 sm:px-6">
           <div className="min-w-0">
             <h2 id="add-wine-title" className="text-lg font-semibold text-zinc-900">
-              Добавить вино
+              {t.addWine.title}
             </h2>
             <p className="mt-1 text-sm text-zinc-600">
               {copyFrom
-                ? `На основе «${copyFrom.name.trim()}» — измените нужные поля`
-                : "Поля со звёздочкой обязательны"}
+                ? fmt(t.addWine.basedOn, { name: copyFrom.name.trim() })
+                : t.addWine.requiredHint}
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="shrink-0 rounded-lg p-2 text-zinc-500 hover:bg-zinc-100"
-            aria-label="Закрыть"
+            aria-label={t.common.close}
           >
             ✕
           </button>
@@ -371,7 +379,7 @@ export function AddWineModal({
           onSubmit={(e) => {
             e.preventDefault();
             setSubmitAttempted(true);
-            const err = validateForm(form, resolvedCountry, resolvedRegion);
+            const err = validateForm(form, resolvedCountry, resolvedRegion, t.form);
             if (err) return;
             if (submitting) return;
 
@@ -430,33 +438,33 @@ export function AddWineModal({
         >
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 sm:px-6">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
-              <Field label="Название" required>
+              <Field label={t.addWine.name} required>
                 <TextInput
                   value={form.name}
                   onChange={(e) => patch({ name: e.target.value })}
                 />
               </Field>
 
-              <Field label="Производитель" required>
+              <Field label={t.addWine.producer} required>
                 <TextInput
                   value={form.producer}
                   onChange={(e) => patch({ producer: e.target.value })}
                 />
               </Field>
 
-              <Field label="Цвет" required>
+              <Field label={t.addWine.color} required>
                 <Select
                   value={form.color}
                   onChange={(e) => patch({ color: e.target.value as WineColor })}
                 >
-                  <option value="red">Красное</option>
-                  <option value="white">Белое</option>
-                  <option value="rose">Розовое</option>
-                  <option value="sparkling">Игристое</option>
+                  <option value="red">{t.colors.red}</option>
+                  <option value="white">{t.colors.white}</option>
+                  <option value="rose">{t.colors.rose}</option>
+                  <option value="sparkling">{t.colors.sparkling}</option>
                 </Select>
               </Field>
 
-              <Field label="Год" required>
+              <Field label={t.addWine.year} required>
                 <div className="flex gap-2">
                   <TextInput
                     className={[
@@ -492,7 +500,7 @@ export function AddWineModal({
                         : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50",
                       submitting ? "cursor-not-allowed opacity-60" : "",
                     ].join(" ")}
-                    title="Нет винтажа (No Vintage)"
+                    title={t.addWine.nvTitle}
                   >
                     {WINE_VINTAGE_NV}
                   </button>
@@ -502,7 +510,7 @@ export function AddWineModal({
                 ) : null}
               </Field>
 
-              <Field label="Страна" required>
+              <Field label={t.addWine.country} required>
                 <Select
                   value={form.countrySelect}
                   onChange={(e) => {
@@ -519,27 +527,27 @@ export function AddWineModal({
                       {name}
                     </option>
                   ))}
-                  <option value={WINE_COUNTRY_OTHER_VALUE}>Другое</option>
+                  <option value={WINE_COUNTRY_OTHER_VALUE}>{t.common.other}</option>
                 </Select>
                 {isCountryOther ? (
                   <TextInput
                     className="mt-2"
                     value={form.countryOther}
                     onChange={(e) => patch({ countryOther: e.target.value })}
-                    placeholder="Название страны"
+                    placeholder={t.addWine.countryNamePlaceholder}
                   />
                 ) : null}
               </Field>
 
-              <Field label="Регион" required>
+              <Field label={t.addWine.region} required>
                 {isCountryOther ? (
                   <TextInput
                     value={form.regionOther}
                     onChange={(e) => patch({ regionOther: e.target.value })}
-                    placeholder="Регион"
+                    placeholder={t.addWine.regionPlaceholder}
                   />
                 ) : !resolvedCountry ? (
-                  <TextInput disabled placeholder="Сначала выберите страну" />
+                  <TextInput disabled placeholder={t.addWine.firstSelectCountry} />
                 ) : (
                   <>
                     <Select
@@ -550,36 +558,36 @@ export function AddWineModal({
                       disabled={regionsLoading}
                     >
                       <option value="">
-                        {regionsLoading ? "Загрузка…" : "—"}
+                        {regionsLoading ? t.common.loading : "—"}
                       </option>
                       {regionOptions.map((r) => (
                         <option key={r} value={r}>
                           {r}
                         </option>
                       ))}
-                      <option value={WINE_REGION_OTHER_VALUE}>Другое</option>
+                      <option value={WINE_REGION_OTHER_VALUE}>{t.common.other}</option>
                     </Select>
                     {isRegionOther ? (
                       <TextInput
                         className="mt-2"
                         value={form.regionOther}
                         onChange={(e) => patch({ regionOther: e.target.value })}
-                        placeholder="Название региона"
+                        placeholder={t.addWine.regionNamePlaceholder}
                       />
                     ) : null}
                   </>
                 )}
               </Field>
 
-              <Field label="Апелласьон">
+              <Field label={t.addWine.appellation}>
                 <TextInput
                   value={form.subregion}
                   onChange={(e) => patch({ subregion: e.target.value })}
-                  placeholder="Марго"
+                  placeholder={t.addWine.appellationPlaceholder}
                 />
               </Field>
 
-              <Field label="Сорт винограда">
+              <Field label={t.addWine.grape}>
                 <TextInput
                   value={form.grape}
                   onChange={(e) => patch({ grape: e.target.value })}
@@ -611,14 +619,14 @@ export function AddWineModal({
                 </div>
               </Field>
 
-              <Field label="Кол-во бутылок" required>
+              <Field label={t.addWine.quantity} required>
                 <NumberInput
                   value={form.quantity}
                   onChange={(e) => patch({ quantity: e.target.value })}
                 />
               </Field>
 
-              <Field label="Цена покупки" required>
+              <Field label={t.addWine.purchasePrice} required>
                 <NumberInput
                   value={form.purchasePrice}
                   onChange={(e) => patch({ purchasePrice: e.target.value })}
@@ -626,7 +634,7 @@ export function AddWineModal({
               </Field>
 
               <CurrencyField
-                label="Валюта покупки"
+                label={t.addWine.purchaseCurrency}
                 required
                 currencyKey={form.purchaseCurrencyKey}
                 currencyOther={form.purchaseCurrencyOther}
@@ -636,14 +644,14 @@ export function AddWineModal({
                 }
               />
 
-              <Field label="Цена в Израиле">
+              <Field label={t.addWine.israelPrice}>
                 <NumberInput
                   value={form.israelPrice}
                   onChange={(e) => patch({ israelPrice: e.target.value })}
                 />
               </Field>
 
-              <Field label="Цена в стране (оригинал)" required>
+              <Field label={t.addWine.originPrice} required>
                 <NumberInput
                   value={form.originPrice}
                   onChange={(e) => patch({ originPrice: e.target.value })}
@@ -651,7 +659,7 @@ export function AddWineModal({
               </Field>
 
               <CurrencyField
-                label="Валюта (оригинал)"
+                label={t.addWine.originCurrency}
                 required
                 currencyKey={form.originCurrencyKey}
                 currencyOther={form.originCurrencyOther}
@@ -661,7 +669,7 @@ export function AddWineModal({
                 }
               />
 
-              <Field label="Дата покупки" required>
+              <Field label={t.addWine.purchaseDate} required>
                 <TextInput
                   type="date"
                   value={form.purchaseDate}
@@ -669,7 +677,7 @@ export function AddWineModal({
                 />
               </Field>
 
-              <Field label="Заметка">
+              <Field label={t.addWine.note}>
                 <TextInput
                   value={form.notes}
                   onChange={(e) => patch({ notes: e.target.value })}
@@ -691,7 +699,7 @@ export function AddWineModal({
                 disabled={submitting}
                 className="rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Отмена
+                {t.common.cancel}
               </button>
               <button
                 type="submit"
@@ -709,10 +717,10 @@ export function AddWineModal({
                       className="inline-block size-4 animate-spin rounded-full border-2 border-white/40 border-t-white"
                       aria-hidden
                     />
-                    Добавление…
+                    {t.common.adding}
                   </>
                 ) : (
-                  "Добавить"
+                  t.common.add
                 )}
               </button>
             </div>

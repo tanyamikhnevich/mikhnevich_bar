@@ -1,9 +1,15 @@
+"use client";
+
+import { useI18n } from "@/lib/i18n/I18nProvider";
+
 type Props = {
   label?: string;
   className?: string;
 };
 
 export function LoadingSpinner({ label, className = "" }: Props) {
+  const { t } = useI18n();
+  const text = label ?? t.common.loading;
   return (
     <span
       className={`inline-flex items-center gap-2 text-sm text-zinc-600 ${className}`}
@@ -13,13 +19,13 @@ export function LoadingSpinner({ label, className = "" }: Props) {
         className="inline-block size-4 shrink-0 animate-spin rounded-full border-2 border-zinc-200 border-t-rose-600"
         aria-hidden
       />
-      {label ? <span>{label}</span> : null}
+      {text ? <span>{text}</span> : null}
     </span>
   );
 }
 
 export function TableLoadingPanel({
-  label = "Загрузка…",
+  label,
   className = "",
 }: {
   label?: string;

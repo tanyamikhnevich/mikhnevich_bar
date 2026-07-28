@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 /**
  * Страница со Swagger UI. Отдаёт интерактивную документацию по openapi.yaml.
@@ -19,6 +20,7 @@ declare global {
 }
 
 export default function DocsPage() {
+  const { t } = useI18n();
   useEffect(() => {
     let cancelled = false;
 
@@ -66,10 +68,7 @@ export default function DocsPage() {
   return (
     <div style={{ minHeight: "100%", background: "#fafafa" }}>
       <div id="swagger-ui" />
-      <noscript>
-        Для просмотра документации нужен включённый JavaScript. Либо откройте
-        файл /openapi.yaml в editor.swagger.io.
-      </noscript>
+      <noscript>{t.docs.noscript}</noscript>
     </div>
   );
 }

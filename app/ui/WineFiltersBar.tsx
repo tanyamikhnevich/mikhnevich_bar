@@ -1,12 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import {
-  priceFieldOptionsFor,
-  ratingFilterLabelFor,
-  type WineFilterContext,
-} from "@/lib/wineListUi";
+import { priceFieldsFor, type WineFilterContext } from "@/lib/wineListUi";
 import type { WinePriceFilterField } from "@/lib/wineQuery";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 const SEARCH_DEBOUNCE_MS = 320;
 
@@ -52,6 +49,7 @@ function CountryMultiSelect({
   onOpenChange?: (open: boolean) => void;
   onPanelClose?: () => void;
 }) {
+  const { t, fmt } = useI18n();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const listId = useId();
@@ -82,12 +80,12 @@ function CountryMultiSelect({
 
   const label =
     selected.length === 0
-      ? "Все страны"
+      ? t.filters.allCountries
       : selected.length === 1
         ? selected[0]
         : selected.length <= 2
           ? selected.join(", ")
-          : `${selected.length} стран`;
+          : fmt(t.filters.countriesCount, { count: selected.length });
 
   const toggle = (country: string) => {
     if (selected.includes(country)) {
@@ -121,7 +119,7 @@ function CountryMultiSelect({
           onClick={(e) => e.stopPropagation()}
         >
           {options.length === 0 ? (
-            <p className="px-2 py-2 text-xs text-zinc-500">Нет стран в коллекции</p>
+            <p className="px-2 py-2 text-xs text-zinc-500">{t.filters.noCountries}</p>
           ) : (
             options.map((country) => {
               const checked = selected.includes(country);
@@ -148,7 +146,7 @@ function CountryMultiSelect({
                 onClick={() => onChange([])}
                 className="text-xs font-medium text-rose-700 hover:underline"
               >
-                Сбросить страны
+                {t.filters.resetCountries}
               </button>
             </div>
           ) : null}
@@ -178,8 +176,10 @@ export function WineFiltersBar({
   onRatingMin,
   onReset,
 }: Props) {
-  const priceOptions = priceFieldOptionsFor(filterContext);
-  const ratingLabel = ratingFilterLabelFor(filterContext);
+  const { t } = useI18n();
+  const priceFields = priceFieldsFor(filterContext);
+  const ratingLabel =
+    filterContext === "drank" ? t.filters.myRatingGte : t.filters.vivinoGte;
   const [searchDraft, setSearchDraft] = useState(nameQuery);
   const [countryDraft, setCountryDraft] = useState(countryKeys);
   const countryDraftRef = useRef(countryKeys);
@@ -260,7 +260,7 @@ export function WineFiltersBar({
           className="inline-flex h-7 items-center gap-1 rounded border border-zinc-200 bg-white px-2 text-xs font-medium text-zinc-800 hover:bg-zinc-50"
           aria-expanded={expanded}
         >
-          Фильтры
+          {t.filters.filters}
           {activeCount > 0 ? (
             <span className="rounded-full bg-rose-100 px-1.5 text-[10px] font-semibold leading-4 text-rose-800">
               {activeCount}
@@ -276,7 +276,7 @@ export function WineFiltersBar({
             onClick={onReset}
             className="h-7 px-1.5 text-xs font-medium text-rose-700 hover:text-rose-900"
           >
-            Сбросить
+            {t.common.reset}
           </button>
         ) : null}
       </div>
@@ -289,20 +289,20 @@ export function WineFiltersBar({
       >
       <label className="flex min-w-0 flex-col gap-1 lg:col-span-3">
         <span className="text-[11px] font-medium text-zinc-600 sm:text-xs">
-          Название или производитель
+          {t.filters.nameOrProducer}
         </span>
         <input
           type="search"
           value={searchDraft}
           onChange={(e) => setSearchDraft(e.target.value)}
-          placeholder="Поиск по названию или производителю…"
+          placeholder={t.filters.searchPlaceholder}
           className={compactInput}
         />
       </label>
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-12 lg:items-end lg:gap-x-2 lg:gap-y-1.5">
         <div className="flex min-w-0 flex-col gap-1 lg:col-span-2">
-          <span className="text-[11px] font-medium text-zinc-600 sm:text-xs">Страна</span>
+          <span className="text-[11px] font-medium text-zinc-600 sm:text-xs">{t.filters.country}</span>
           <CountryMultiSelect
             selected={countryDraft}
             options={countryOptions}
@@ -313,7 +313,7 @@ export function WineFiltersBar({
         </div>
 
         <label className="flex min-w-0 flex-col gap-1 lg:col-span-2">
-          <span className="text-[11px] font-medium text-zinc-600 sm:text-xs">Регион</span>
+          <span className="text-[11px] font-medium text-zinc-600 sm:text-xs">{t.filters.region}</span>
           <select
             value={regionKey}
             onChange={(e) => onRegionKey(e.target.value)}
@@ -323,9 +323,9 @@ export function WineFiltersBar({
             <option value="">
               {regionDisabled
                 ? countryKeys.length === 0
-                  ? "Сначала страна"
-                  : "Одна страна"
-                : "Все"}
+                  ? t.filters.regionFirstCountry
+                  : t.filters.regionOneCountry
+                : t.filters.all}
             </option>
             {regionOptions.map((r) => (
               <option key={r} value={r}>
@@ -336,22 +336,22 @@ export function WineFiltersBar({
         </label>
 
         <label className="flex min-w-0 flex-col gap-1 lg:col-span-2">
-          <span className="text-[11px] font-medium text-zinc-600 sm:text-xs">Цена (поле)</span>
+          <span className="text-[11px] font-medium text-zinc-600 sm:text-xs">{t.filters.priceField}</span>
           <select
             value={priceField}
             onChange={(e) => onPriceField(e.target.value as WinePriceFilterField)}
             className={compactInput}
           >
-            {priceOptions.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
+            {priceFields.map((field) => (
+              <option key={field} value={field}>
+                {t.priceField[field]}
               </option>
             ))}
           </select>
         </label>
 
         <label className="flex min-w-0 flex-col gap-1 lg:col-span-1">
-          <span className="text-[11px] font-medium text-zinc-600 sm:text-xs">Цена от</span>
+          <span className="text-[11px] font-medium text-zinc-600 sm:text-xs">{t.filters.priceFrom}</span>
           <input
             type="text"
             inputMode="decimal"
@@ -363,7 +363,7 @@ export function WineFiltersBar({
         </label>
 
         <label className="flex min-w-0 flex-col gap-1 lg:col-span-1">
-          <span className="text-[11px] font-medium text-zinc-600 sm:text-xs">Цена до</span>
+          <span className="text-[11px] font-medium text-zinc-600 sm:text-xs">{t.filters.priceTo}</span>
           <input
             type="text"
             inputMode="decimal"

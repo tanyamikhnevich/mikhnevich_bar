@@ -5,6 +5,7 @@ import { toWineJson } from "@/lib/mapWineJson";
 import { parseVivinoFromRatings } from "@/lib/wineUtils";
 import { normalizeWineGeo } from "@/lib/wineNormalize";
 import { normalizeWineVintage } from "@/lib/wineVintage";
+import { getServerDictionary } from "@/lib/i18n/server";
 
 /** Полный список (без фильтров). Для UI используйте GET /api/wines/browse. */
 export async function GET() {
@@ -33,7 +34,8 @@ export async function POST(req: Request) {
   const name = typeof body.name === "string" ? body.name.trim() : "";
   const producer = typeof body.producer === "string" ? body.producer.trim() : "";
   if (!name || !producer) {
-    return NextResponse.json({ error: "Нужны name и producer" }, { status: 400 });
+    const { errors } = await getServerDictionary();
+    return NextResponse.json({ error: errors.nameProducerRequired }, { status: 400 });
   }
 
   const ratings =

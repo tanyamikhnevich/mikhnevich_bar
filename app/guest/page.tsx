@@ -6,15 +6,15 @@ import { SortBar } from "../ui/SortBar";
 import { WineFiltersBar } from "../ui/WineFiltersBar";
 import { GuestWineTable } from "../ui/GuestWineTable";
 import { useGuestWines } from "@/lib/wines";
-import { sortOptionsFor } from "@/lib/wineListUi";
+import { sortKeysForContext } from "@/lib/wineListUi";
 import type { WineColor, WineSortKey } from "@/lib/wines";
 import {
   groupWinesByColor,
   sortWines,
-  WINE_COLOR_LABEL,
   WINE_COLOR_ORDER,
   WINE_SECTION_HEADER_CLASS,
 } from "@/lib/wines";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { WinePriceFilterField } from "@/lib/wineQuery";
 import {
   filterWinesByToolbar,
@@ -25,6 +25,7 @@ import {
 } from "@/lib/wineFilters";
 
 export default function GuestPage() {
+  const { t, fmt } = useI18n();
   const { wines, loading, error } = useGuestWines();
 
   const [nameQuery, setNameQuery] = useState("");
@@ -109,17 +110,17 @@ export default function GuestPage() {
     setRatingMinStr("");
   };
 
-  const sortOptions = sortOptionsFor("guest");
+  const sortOptions = sortKeysForContext("guest");
 
   return (
     <div className="min-h-full bg-zinc-50 text-zinc-900">
       <AppHeader
         emoji="🥂"
-        title="Гостевая карта"
+        title={t.guestPage.title}
         subtitle={
           guestCount === 0
-            ? "Пока нет вин в гостевой карте"
-            : `${guestCount} позиций для гостей`
+            ? t.guestPage.emptySubtitle
+            : fmt(t.guestPage.countSubtitle, { count: guestCount })
         }
       />
 
@@ -131,7 +132,7 @@ export default function GuestPage() {
         ) : null}
 
         {loading ? (
-          <div className="py-16 text-center text-sm text-zinc-500">Загрузка…</div>
+          <div className="py-16 text-center text-sm text-zinc-500">{t.common.loading}</div>
         ) : (
           <>
             <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -182,7 +183,7 @@ export default function GuestPage() {
                           className={`px-4 py-2 ${WINE_SECTION_HEADER_CLASS[color]}`}
                         >
                           <h2 className="text-sm font-semibold">
-                            {WINE_COLOR_LABEL[color]}
+                            {t.colors[color]}
                           </h2>
                         </div>
 
@@ -202,7 +203,7 @@ export default function GuestPage() {
                               }
                               className="min-h-11 w-full rounded-xl border border-zinc-200 bg-zinc-50 text-sm font-medium text-zinc-800 active:bg-zinc-100 sm:rounded-lg sm:py-2"
                             >
-                              Показать ещё
+                              {t.common.showMore}
                             </button>
                           </div>
                         ) : null}
@@ -212,8 +213,7 @@ export default function GuestPage() {
                 )
               ) : (
                 <div className="rounded-xl border border-zinc-200 bg-white px-4 py-12 text-center text-sm text-zinc-500">
-                  В гостевой карте пока нет вин. Выберите позиции на главной странице и
-                  сохраните гостевую карту.
+                  {t.guestPage.emptyBody}
                 </div>
               )}
             </div>
