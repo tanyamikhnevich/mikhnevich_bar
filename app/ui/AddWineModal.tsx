@@ -343,9 +343,6 @@ export function AddWineModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="add-wine-title"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
     >
       <div className="flex max-h-[min(92dvh,42rem)] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:max-h-[min(90vh,42rem)] sm:rounded-2xl">
         <div className="flex shrink-0 items-start justify-between gap-4 border-b border-zinc-200 px-5 py-4 sm:px-6">

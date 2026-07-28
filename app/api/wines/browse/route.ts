@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { Prisma } from "../../../../lib/generated/prisma/client";
 import { prisma } from "../../../../lib/prisma";
 import { requireApiSession } from "../../../../lib/auth/dal";
+import { getIlsRates } from "../../../../lib/exchangeRates";
 import { toWineJson } from "../../../../lib/mapWineJson";
 import {
   fetchCountryFacetOptions,
@@ -44,6 +45,8 @@ export async function GET(req: Request) {
     ? buildWineOrderBy("name", "asc")
     : buildWineOrderBy(filters.sortBy, filters.sortDir);
 
+  const exchange = await getIlsRates();
+
   async function fetchSortedRows(
     where: Prisma.WineWhereInput,
     limit: number,
@@ -53,7 +56,12 @@ export async function GET(req: Request) {
       return prisma.wine.findMany({ where, orderBy, take: limit, skip });
     }
     const rows = await prisma.wine.findMany({ where });
-    const sorted = sortWineRowsInMemory(rows, filters.sortBy, filters.sortDir);
+    const sorted = sortWineRowsInMemory(
+      rows,
+      filters.sortBy,
+      filters.sortDir,
+      exchange.ils,
+    );
     return sorted.slice(skip, skip + limit);
   }
 
@@ -73,7 +81,12 @@ export async function GET(req: Request) {
       : "";
 
   const filtersResolved = { ...filters, countryKeys, regionKey };
-  const totals = await fetchWineTotals(userId);
+  const totals = await fetchWineTotals(userId, exchange.ils);
+  const exchangeInfo = {
+    date: exchange.date,
+    stale: exchange.stale,
+    ils: exchange.ils,
+  };
 
   if (flat) {
     const { limit, offset } = parseFlatPagination(url.searchParams);
@@ -85,6 +98,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json({
       totals,
+      exchange: exchangeInfo,
       facets: {
         countries: countryOptions,
         regions: singleCountry ? regionOptionsRaw : [],
@@ -126,6 +140,7 @@ export async function GET(req: Request) {
 
   return NextResponse.json({
     totals,
+    exchange: exchangeInfo,
     facets: {
       countries: countryOptions,
       regions: singleCountry ? regionOptionsRaw : [],

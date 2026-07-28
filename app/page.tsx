@@ -27,6 +27,7 @@ import {
 } from "@/lib/wineListUi";
 import type { Wine, WineColor, WineSortKey } from "@/lib/wines";
 import {
+  formatDateRU,
   formatTableAmount,
   WINE_COLOR_LABEL,
   WINE_COLOR_ORDER,
@@ -123,6 +124,7 @@ function HomePageContent() {
     bottles: 0,
     value: 0,
   };
+  const exchange = data?.exchange;
   const countryOptions = data?.facets.countries ?? [];
   const regionOptions = data?.facets.regions ?? [];
 
@@ -339,6 +341,19 @@ function HomePageContent() {
         subtitle={
           <>
             {totals.bottles} бут. · закупка {formatTableAmount(totals.value)}
+            {" ₪"}
+            {exchange ? (
+              <span className="mt-0.5 block text-xs text-zinc-400">
+                Курс{exchange.date ? ` на ${formatDateRU(exchange.date)}` : ""}:{" "}
+                {exchange.ils.EUR
+                  ? `€ ${exchange.ils.EUR.toFixed(2)} ₪`
+                  : null}
+                {exchange.ils.USD
+                  ? ` · $ ${exchange.ils.USD.toFixed(2)} ₪`
+                  : null}
+                {exchange.stale ? " · устаревший" : ""}
+              </span>
+            ) : null}
           </>
         }
         actions={
@@ -485,11 +500,7 @@ function HomePageContent() {
                           onRestore={tab === "drank" ? handleRestore : undefined}
                           onUpdate={handleUpdate}
                           onDelete={handleDelete}
-                          onCopy={
-                            tab === "collection"
-                              ? (wine) => openAddWine(wine)
-                              : undefined
-                          }
+                          onCopy={(wine) => openAddWine(wine)}
                         />
                       )}
 

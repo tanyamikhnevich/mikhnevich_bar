@@ -36,6 +36,11 @@ yarn-error.log*
 # vercel
 .vercel
 
+# database backups / dumps — НЕ коммитить (содержат данные)
+/backups/
+*.dump
+israel-origin-backup-*.json
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

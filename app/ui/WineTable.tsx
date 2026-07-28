@@ -560,9 +560,9 @@ function WineTableTbody({
                             <PencilIcon />
                           </IconButton>
                         ) : null}
-                        {onCopy && !w.drank ? (
+                        {onCopy ? (
                           <IconButton
-                            title="Скопировать для нового вина"
+                            title="Скопировать как новое вино в коллекцию"
                             disabled={isBusy}
                             onClick={() => onCopy(w)}
                             className="text-zinc-500 hover:bg-zinc-100 hover:text-rose-700"
